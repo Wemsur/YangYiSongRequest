@@ -1,0 +1,30 @@
+{
+  "name": "yangyi-song-request",
+  "version": "0.1.0",
+  "private": true,
+  "description": "杨村一中校园广播电视台在线点歌系统",
+  "engines": {
+    "node": ">=20"
+  },
+  "workspaces": [
+    "server",
+    "web"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,web -c yellow,magenta \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:server": "npm run dev --workspace server",
+    "dev:web": "npm run dev --workspace web",
+    "build": "npm run build --workspace web && npm run build --workspace server",
+    "start:prod": "npm run start --workspace server",
+    "typecheck": "npm run typecheck --workspace server && npm run typecheck --workspace web",
+    "test": "npm run test --workspace server"
+  },
+  "devDependencies": {
+    "concurrently": "10.0.5",
+    "typescript": "6.0.3"
+  },
+  "comment:overrides": "vue-tsc 3.x 仍然 require typescript/lib/tsc，而 TypeScript 7 的原生版本不再导出这个入口，所以整仓统一压在 6.0.3",
+  "overrides": {
+    "typescript": "6.0.3"
+  }
+}
