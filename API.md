@@ -5,61 +5,31 @@
 
 ## 数据模型
 
-```prisma
-model SongRequest {
-  id            String   @id @default(cuid())
-  queryCode     String   @unique           // 6 位查询码
-  source        Source                     // NETEASE | QQ | KUGOU
-  platformId    String                     // 平台歌曲 ID
-  title         String
-  artist        String
-  album         String?
-  durationMs    Int
-  coverUrl      String?
-  grade         Grade?                     // G1 | G2 | G3，关闭身份填写时为空
-  classNo       Int?
-  requesterName String?
-  status        Status                     // PENDING | SCHEDULED | PLAYED | REJECTED
-  rejectReason  String?
-  flaggedWords  String[]                   // 敏感词命中
-  isManual      Boolean  @default(false)   // 管理员补录
-  submitIp      String
-  createdAt     DateTime @default(now())
-  schedule      Schedule?
-}
-```
+结构以 [server/prisma/schema.prisma](server/prisma/schema.prisma) 为唯一准绳，本节只记录约束与意图，改 schema 时同步这里。
 
-```prisma
-model Schedule {
-  id        String        @id @default(cuid())
-  requestId String        @unique
-  request   SongRequest   @relation(fields: [requestId], references: [id])
-  playDate  DateTime      @db.Date
-  slotId    String
-  slot      BroadcastSlot @relation(fields: [slotId], references: [id])
-  orderNo   Int
+| 模型 | 作用 | 关键约束 |
+| --- | --- | --- |
+| `SongRequest` | 一条点歌 | `queryCode` 唯一（6 位）；`grade` / `classNo` / `requesterName` 可空，对应关闭身份填写；`flaggedWords` 存敏感词命中；`isManual` 标记管理员补录 |
+| `Schedule` | 排期 | `(playDate, slotId, orderNo)` 唯一；`requestId` 唯一，一条点歌最多一个排期；删点歌级联删排期 |
+| `BroadcastSlot` | 播出时段 | `name` 唯一；`startTime` / `endTime` 是 `HH:mm` 字符串，按 Asia/Shanghai 解读；`maxCount` / `maxMs` 空表示不限；被排期引用时禁止删除 |
+| `CalendarDay` | 行政历 | 主键即日期；`kind` 为 `SCHOOL` / `OFF` / `EXAM_NO_BROADCAST`，只有 `SCHOOL` 可排期 |
+| `AdminUser` | 管理员 | `username` 唯一；`role` 为 `SUPER` / `REVIEWER`；`mustChangePassword` 用于强制首次改密 |
+| `AuditLog` | 操作日志 | `actorId` 可空（账号删除后仍保留记录）；`detail` 为 JSON |
+| `GradeConfig` | 年级班数 | 主键即年级，默认 23 |
+| `BannedWord` | 敏感词 | 主键即词本身 |
+| `SourceCredential` | 音源凭据 | 主键即音源；`encryptedData` 为 AES-256-GCM 密文，iv 与 authTag 一并编码在内 |
+| `SiteSetting` | 站点开关 | 键值表，见下 |
 
-  @@unique([playDate, slotId, orderNo])
-}
+`SiteSetting` 已用的键：
 
-model BroadcastSlot {
-  id        String  @id @default(cuid())
-  name      String            // 午间档
-  startTime String            // "12:00"
-  endTime   String            // "12:30"
-  maxCount  Int?              // 首数上限
-  maxMs     Int?              // 总时长上限
-  enabled   Boolean @default(true)
-}
+| 键 | 类型 | 默认 | 含义 |
+| --- | --- | --- | --- |
+| `requestsOpen` | 布尔 | `true` | 点歌通道是否开放 |
+| `requireIdentity` | 布尔 | `true` | 是否要求填写年级 / 班级 / 姓名 |
+| `announcement` | 文本 | 空 | 首页公告 |
+| `maxScheduleDays` | 整数 | `14` | 最远可排多少天 |
 
-model CalendarDay {
-  date DateTime @id @db.Date
-  kind DayKind            // SCHOOL | OFF | EXAM_NO_BROADCAST
-  note String?
-}
-```
-
-其余模型：`AdminUser`（username, passwordHash, role, mustChangePassword, disabled）、`AuditLog`（actorId, action, targetId, detail, createdAt）、`GradeConfig`（grade, classCount）、`BannedWord`、`SourceCredential`（source, encryptedCookie, updatedAt, lastCheckOk）、`SiteSetting`（key, value，存点歌开关与公告）。
+Prisma 7 的两处约定：`datasource` 块里不再写 `url`，迁移用的连接串来自 `server/prisma.config.ts`，运行时的来自 driver adapter（`server/src/lib/db.ts`）；生成的 client 落在 `server/src/generated/prisma`，不进版本库。
 
 ## 前台接口
 

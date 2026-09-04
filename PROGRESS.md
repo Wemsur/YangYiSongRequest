@@ -2,7 +2,7 @@
 
 > 每完成一步就更新这里。新会话靠它判断做到哪了。
 
-当前阶段：**S1 骨架已完成，等待 S2 指令**
+当前阶段：**S2 schema、迁移 SQL、种子脚本已就绪，等一个可连的 Postgres 才能实际执行**
 
 ## 阶段计划
 
@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | S0 | 需求确认 + 五份文档 | ✅ 完成 2026-08-31 |
 | S1 | 项目骨架：monorepo、TS 配置、Fastify 起服务、Vite 起前端、Tailwind token 落地 | ✅ 完成 2026-08-31 |
-| S2 | 数据模型：Prisma schema + 首次迁移 + 种子数据（超管、时段、班数） | ⬜ |
+| S2 | 数据模型：Prisma schema + 首次迁移 + 种子数据（超管、时段、班数） | 🔄 待连库执行 |
 | S3 | 音源适配层：三家 search/detail/streamUrl/downloadUrl/lyric + Vitest + 可用性自检 | ⬜ |
 | S4 | 前台：搜索 tab、试听代理、点歌弹窗与提交、查询码查询 | ⬜ |
 | S5 | 前台：最近歌单与过往歌单 | ⬜ |
@@ -21,6 +21,7 @@
 
 ## 待办与悬而未决
 
+- [ ] **需要一个可连的 Postgres**：Neon 连接串填进 `server/.env` 的 `DATABASE_URL`（或本地起一个），然后 `npx prisma migrate deploy` + `npm run seed --workspace server`，S2 才算跑通。本机 Docker 已装但守护进程没开，所以没在本地起库。
 - [ ] 网易云会员 Cookie：待 S7 完成后由管理员在后台扫码登录写入，不经聊天传递
 - [ ] 三个音源的具体开源实现需在 S3 实测后定稿，把最终选定的包名与版本写回 CONTEXT.md
 - [ ] 台标 / 校徽：暂无，先用文字标识「杨一之声」，拿到素材再替换
@@ -28,6 +29,9 @@
 - [ ] Render 免费档实际额度条款以控制台为准，S9 时核对并回填 DEPLOY.md
 
 ## 变更记录
+
+- 2026-08-31 S2 数据模型落地：10 个模型（点歌、排期、时段、行政历、管理员、操作日志、班数、敏感词、音源凭据、站点开关）、初始迁移 SQL、幂等种子脚本（超管 yadmin、午间档 12:00–12:30 与晚间档 17:40–18:00、每年级 23 班、四个站点开关）。`prisma validate`、`prisma generate`、`npm run typecheck`、`npm run build` 均通过，tsx 也能解析生成的 client；迁移与种子的实际执行等数据库连接串。
+  - Prisma 7 的三处差异已写进 CONTEXT.md 第 6 节：datasource 不写 url、生成目录必须显式指定、`migrate diff` 参数改名。
 
 - 2026-08-31 追加需求：身份填写（年级 / 班级 / 姓名）改为超管可开关，默认要求填写；关闭后点歌完全匿名，「同姓名每天 2 首」限流随之失效，只剩 IP 维度。`SongRequest` 的这三个字段因此可空。
 - 2026-08-31 S1 骨架完成：npm workspaces（server / web）、Fastify 起服务并托管前端 dist、`/healthz` 与 `/api/version`、Vue 3 + Vite + Tailwind v4 设计 token、深浅色跟随系统、标识 SVG 生成脚本、首页播出单骨架。`npm run typecheck` 与 `npm run build` 均通过，生产模式实测 `/healthz`、静态托管、SPA 回退、未知接口 404 均正常。

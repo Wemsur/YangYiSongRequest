@@ -20,6 +20,19 @@
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
+## 数据库准备（Neon）
+
+1. 在 [neon.com](https://neon.com) 建一个免费项目，区域选新加坡或美西，和 Render 服务同侧可少几十毫秒。
+2. 复制 pooled 连接串（形如 `postgresql://user:pass@ep-xxx-pooler.region.aws.neon.tech/dbname?sslmode=require`），填进 Render 的 `DATABASE_URL`。
+3. 本地开发把同一串写进 `server/.env`（从 `server/.env.example` 复制），或者自己起一个本地 Postgres。
+4. 迁移不需要手动执行：`npm run start:prod` 会先跑 `prisma migrate deploy`。种子数据要显式跑一次：
+
+```bash
+npm run seed --workspace server
+```
+
+`prisma` 是 devDependency，Render 的构建阶段会装上，所以 `start` 里调用 `prisma migrate deploy` 是可用的。若将来把 Render 的 `NODE_ENV` 设成 `production` 并跳过 devDependencies，需要把 prisma 挪到 dependencies。
+
 ## 构建与启动
 
 Render 服务设置：

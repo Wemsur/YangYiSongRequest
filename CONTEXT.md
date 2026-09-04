@@ -97,13 +97,18 @@
 ```
 YangYiSongRequest/
 ├─ server/
+│  ├─ prisma/
+│  │  ├─ schema.prisma    数据模型的唯一准绳
+│  │  ├─ migrations/      迁移 SQL，随代码提交
+│  │  └─ seed.ts          种子：超管、时段、班数、站点开关
+│  ├─ prisma.config.ts    Prisma 7 的 CLI 配置（连接串、迁移目录、seed 命令）
 │  └─ src/
 │     ├─ app.ts          Fastify 实例与插件注册
 │     ├─ routes/         public/ 与 admin/ 两组路由
 │     ├─ sources/        netease.ts / qq.ts / kugou.ts + index.ts 聚合
 │     ├─ services/       排期、审核、下载打包、敏感词、限流
-│     ├─ lib/            crypto、时区、日志、zip 流
-│     └─ prisma/         schema.prisma 与 migrations
+│     ├─ lib/            db、crypto、时区、日志、zip 流
+│     └─ generated/      Prisma client，不进版本库
 ├─ web/
 │  ├─ scripts/           build-wordmark.mjs 构建期生成标识 SVG
 │  ├─ src/
@@ -128,6 +133,10 @@ YangYiSongRequest/
 - 所有管理操作写入 AuditLog（谁、何时、对哪条、做了什么）。
 - 密码 argon2id；音源 Cookie 用 AES-256-GCM 加密存库，密钥取自环境变量 `CREDENTIAL_KEY`。
 - 提交与查询接口带 IP 限流，具体阈值见 REQUIREMENTS.md。
+- 数据模型只以 `server/prisma/schema.prisma` 为准，API.md 里那份是约束摘要，改 schema 要顺手更新它。
+- Prisma 7 的三处与旧版不同：`datasource` 块里不写 `url`（迁移连接串在 `server/prisma.config.ts`，运行时靠 `@prisma/adapter-pg` driver adapter）；生成的 client 必须指定 `output`，本项目在 `server/src/generated/prisma`，不进版本库；`prisma migrate diff` 的参数是 `--to-schema` 而不是旧的 `--to-schema-datamodel`。
+- `prisma.config.ts` 里用 `process.env.DATABASE_URL ?? ''` 而不是 prisma 的 `env()`：CLI 每次调用都会加载该文件，而 `prisma generate`、typecheck 并不需要连库，`env()` 缺变量时会直接抛错。
+- 服务端类型检查走 `tsconfig.typecheck.json`（把 `prisma/*.ts` 和 `prisma.config.ts` 一起收进来），构建仍走 `tsconfig.json`，因为它的 `rootDir` 必须锁在 `src`。
 - TypeScript 由根 `overrides` 压在 6.0.3：vue-tsc 3.x 仍然 require `typescript/lib/tsc`，而 TS 7 的原生版本不再导出这个入口。想升到 7 之前先确认 vue-tsc 已支持。
 - 组件的 scoped 样式属于「无层」CSS，按层叠层规则会压过 Tailwind 在 `@layer utilities` 里的工具类，特异性再低也一样（`:where()` 也救不了）。所以组件根元素不要写 display 之类会被调用方覆盖的属性，显隐一律交给外层元素控制，见 `web/src/components/Wordmark.vue` 的注释。
 

@@ -1,0 +1,165 @@
+// 数据模型的说明性文档在 API.md，改这里就要同步那份。
+// 生成的 client 落在 server/src/generated/prisma，不进版本库。
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+}
+
+// Prisma 7 起 datasource 里不再写 url：迁移的连接串来自 prisma.config.ts，
+// 运行时的来自 PrismaClient 的 driver adapter（src/lib/db.ts）。
+datasource db {
+  provider = "postgresql"
+}
+
+enum Source {
+  NETEASE
+  QQ
+  KUGOU
+}
+
+enum Grade {
+  G1
+  G2
+  G3
+}
+
+enum RequestStatus {
+  PENDING
+  SCHEDULED
+  PLAYED
+  REJECTED
+}
+
+enum DayKind {
+  SCHOOL
+  OFF
+  EXAM_NO_BROADCAST
+}
+
+enum AdminRole {
+  SUPER
+  REVIEWER
+}
+
+/// 一条点歌。身份三项（grade / classNo / requesterName）在超管关闭「要求填写身份」时为空。
+model SongRequest {
+  id            String        @id @default(cuid())
+  queryCode     String        @unique @db.VarChar(6)
+  source        Source
+  platformId    String
+  title         String
+  artist        String
+  album         String?
+  durationMs    Int
+  coverUrl      String?
+  grade         Grade?
+  classNo       Int?
+  requesterName String?
+  status        RequestStatus @default(PENDING)
+  rejectReason  String?
+  flaggedWords  String[]
+  isManual      Boolean       @default(false)
+  submitIp      String
+  createdAt     DateTime      @default(now())
+  reviewedAt    DateTime?
+  reviewedById  String?
+  reviewedBy    AdminUser?    @relation(fields: [reviewedById], references: [id], onDelete: SetNull)
+  schedule      Schedule?
+
+  @@index([status, createdAt])
+  @@index([grade, classNo, requesterName, createdAt])
+  @@index([submitIp, createdAt])
+}
+
+/// 排期：日期 + 时段 + 顺序号，三者唯一。
+model Schedule {
+  id        String        @id @default(cuid())
+  requestId String        @unique
+  request   SongRequest   @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  playDate  DateTime      @db.Date
+  slotId    String
+  slot      BroadcastSlot @relation(fields: [slotId], references: [id], onDelete: Restrict)
+  orderNo   Int
+  createdAt DateTime      @default(now())
+
+  @@unique([playDate, slotId, orderNo])
+  @@index([playDate])
+}
+
+/// 播出时段。startTime / endTime 为 "HH:mm"，按 Asia/Shanghai 解读。
+model BroadcastSlot {
+  id        String     @id @default(cuid())
+  name      String     @unique
+  startTime String     @db.VarChar(5)
+  endTime   String     @db.VarChar(5)
+  maxCount  Int?
+  maxMs     Int?
+  sortOrder Int        @default(0)
+  enabled   Boolean    @default(true)
+  schedules Schedule[]
+}
+
+/// 行政历。只有 SCHOOL 的日期可以排期。
+model CalendarDay {
+  date DateTime @id @db.Date
+  kind DayKind
+  note String?
+}
+
+model AdminUser {
+  id                 String        @id @default(cuid())
+  username           String        @unique
+  passwordHash       String
+  role               AdminRole     @default(REVIEWER)
+  mustChangePassword Boolean       @default(false)
+  disabled           Boolean       @default(false)
+  lastLoginAt        DateTime?
+  createdAt          DateTime      @default(now())
+  reviewed           SongRequest[]
+  auditLogs          AuditLog[]
+}
+
+model AuditLog {
+  id        String     @id @default(cuid())
+  actorId   String?
+  actor     AdminUser? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  action    String
+  targetId  String?
+  detail    Json?
+  createdAt DateTime   @default(now())
+
+  @@index([createdAt])
+}
+
+/// 每个年级的班级数量，超管可调。
+model GradeConfig {
+  grade      Grade @id
+  classCount Int
+}
+
+model BannedWord {
+  word      String   @id
+  createdAt DateTime @default(now())
+}
+
+/// 音源账号凭据。encryptedData 是 AES-256-GCM 密文，iv 与 authTag 一并编码在内。
+model SourceCredential {
+  source        Source    @id
+  encryptedData String
+  updatedAt     DateTime  @updatedAt
+  lastCheckAt   DateTime?
+  lastCheckOk   Boolean?
+  note          String?
+}
+
+/// 站点级开关。已用的 key：
+/// requestsOpen(布尔) 点歌通道 · requireIdentity(布尔) 是否要求填写年级班级姓名
+/// announcement(文本) 首页公告 · maxScheduleDays(整数) 最远可排天数
+model SiteSetting {
+  key   String @id
+  value String
+}
+
+

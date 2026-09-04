@@ -1,3 +1,6 @@
+// 必须在 config 之前：本地开发从 server/.env 读取变量，
+// 生产环境（Render）由平台注入，届时没有 .env 文件，dotenv 静默跳过。
+import 'dotenv/config'
 import { buildApp } from './app.js'
 import { config } from './config.js'
 
