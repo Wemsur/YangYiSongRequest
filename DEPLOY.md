@@ -1,72 +1,125 @@
-# DEPLOY — Render 部署与运维
+# DEPLOY — 自托管部署与运维
 
-> 部署形态：单个 Render Web Service（Node），Fastify 同时提供 API 与前端静态文件；数据库用外部 Neon Postgres。
+> 部署形态：一个 Node 进程。Fastify 同时提供 API 和前端静态文件，数据库是同目录下的一个 SQLite 文件。
+> 不需要数据库服务器，不需要 Docker（若日后采纳上游音源项目做 sidecar，那两个服务再单独考虑）。
 
 ## 环境变量
 
+放在 `server/.env`，模板见 [server/.env.example](server/.env.example)。
+
 | 变量 | 说明 |
 | --- | --- |
-| `DATABASE_URL` | Neon 连接串，带 `?sslmode=require` |
-| `JWT_SECRET` | 随机 32 字节以上 |
-| `CREDENTIAL_KEY` | AES-256-GCM 密钥，32 字节 hex，用于加密音源 Cookie |
-| `SEED_ADMIN_USER` | 初始超管用户名，`yadmin` |
-| `SEED_ADMIN_PASSWORD` | 初始密码，首次登录后强制修改 |
+| `DATABASE_URL` | SQLite 文件，默认 `file:./data/app.db`，相对路径以 `server/` 为基准 |
+| `SEED_ADMIN_USER` | 初始超管用户名，默认 `yadmin`，只在跑种子时读取 |
+| `SEED_ADMIN_PASSWORD` | 初始密码，留空则随机生成并在终端打印一次 |
+| `PORT` | 监听端口，默认 3000 |
+| `HOST` | 监听地址，默认 `0.0.0.0` |
 | `PUBLIC_BASE_URL` | 站点对外地址，用于生成绝对链接 |
-| `TZ` | `Asia/Shanghai`（展示层仍以代码内的时区转换为准） |
+| `JWT_SECRET` | S6 鉴权启用后必填，随机 32 字节以上 |
+| `CREDENTIAL_KEY` | S7 音源凭据加密用，32 字节 hex |
 
-密钥生成：
+后两个的生成方式：
 
 ```bash
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-## 数据库准备（Neon）
+## 首次部署
 
-1. 在 [neon.com](https://neon.com) 建一个免费项目，区域选新加坡或美西，和 Render 服务同侧可少几十毫秒。
-2. 复制 pooled 连接串（形如 `postgresql://user:pass@ep-xxx-pooler.region.aws.neon.tech/dbname?sslmode=require`），填进 Render 的 `DATABASE_URL`。
-3. 本地开发把同一串写进 `server/.env`（从 `server/.env.example` 复制），或者自己起一个本地 Postgres。
-4. 迁移不需要手动执行：`npm run start:prod` 会先跑 `prisma migrate deploy`。种子数据要显式跑一次：
+服务器上要有 Node 20 以上。`better-sqlite3` 是原生模块，Linux x64 有官方预编译包，直接装即可；架构冷门（比如 armv7）时需要先备好 `python3`、`make`、`g++`。
+
+```bash
+git clone https://github.com/Wemsur/YangYiSongRequest.git
+cd YangYiSongRequest
+npm ci
+cp server/.env.example server/.env   # 然后按上表改一遍
+npm run build
+npm run start:prod
+```
+
+`npm ci` 不要加 `--omit=dev`：`prisma` 是 devDependency，启动脚本要用它跑迁移。
+
+`npm run start:prod` 会先 `prisma migrate deploy` 把迁移补齐，再启动服务。种子数据只需显式跑一次：
 
 ```bash
 npm run seed --workspace server
 ```
 
-`prisma` 是 devDependency，Render 的构建阶段会装上，所以 `start` 里调用 `prisma migrate deploy` 是可用的。若将来把 Render 的 `NODE_ENV` 设成 `production` 并跳过 devDependencies，需要把 prisma 挪到 dependencies。
+跑完会打印超管账号，如果没设 `SEED_ADMIN_PASSWORD` 还会打印一次随机密码。首次登录会强制改密。
 
-## 构建与启动
+## 进程守护
 
-Render 服务设置：
+systemd 是最省事的做法。`/etc/systemd/system/yysong.service`：
 
-- Build Command：`npm run build`（先把 web 构建到 `web/dist`，再编译 server）
-- Start Command：`npm run start:prod`（当前只启动 Fastify；S2 接入 Prisma 后会先跑 `prisma migrate deploy`）
-- Health Check Path：`/healthz`
+```ini
+[Unit]
+Description=杨一之声在线点歌系统
+After=network.target
 
-## 免费档的四个限制与应对
+[Service]
+Type=simple
+WorkingDirectory=/opt/YangYiSongRequest
+ExecStart=/usr/bin/npm run start:prod
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+User=yysong
 
-1. **15 分钟无请求即休眠**，冷启动数十秒。用 [cron-job.org](https://cron-job.org) 定时 ping `/healthz`，间隔 10 分钟，只在 06:00–23:00（Asia/Shanghai）执行。不要全天 ping：免费档有月度实例运行时长额度，整天保活会顶到上限边缘。不用 GitHub Actions cron，其延迟常达十几分钟。
-2. **无持久磁盘**。所以音频一律实时代理，不落盘缓存。
-3. **无平台级 cron**。「已播出」等状态由时间自动判定 + 进程内定时器处理，配合上面的保活即可。
-4. **月度出网流量有额度**。校园规模的试听与下载用不完，但要避免在前台做整曲预加载。
+[Install]
+WantedBy=multi-user.target
+```
 
-`/healthz` 必须极轻：只返回 200 和版本号，不查数据库。
+然后 `systemctl enable --now yysong`。用 pm2 也可以，效果一样，只是多一个要维护的东西。
 
-## 域名与备案
+## 反向代理与 HTTPS
 
-域名在阿里云注册、未备案，指向境外的 Render：可以正常解析访问，**不需要备案**。备案约束的是服务器在中国大陆境内的情形。
+服务本身只监听 HTTP。要绑域名和证书，前面挂一层 Nginx：
 
-唯一受影响的是国内 CDN——阿里云、腾讯云 CDN 都强制要求备案，未备案用不了。上线后先直连实测速度，校园网通常可接受。若确实慢，两条路：套 Cloudflare 免费版（不需备案，但国内节点质量不稳定，有时更慢），或备案后接国内 CDN。
+```nginx
+server {
+    listen 443 ssl;
+    server_name 你的域名;
 
-## 上线检查
+    # 音频下载会走大文件流式响应，这两项别漏
+    proxy_buffering off;
+    client_max_body_size 8m;
 
-- [ ] Neon 实例已创建，连接串已填入 Render
-- [ ] 首次部署后用 `SEED_ADMIN_PASSWORD` 登录并立即改密
-- [ ] 播出时段与行政历已配置到未来两周
-- [ ] 网易云已扫码登录，`/api/admin/sources/health` 三项状态正常
-- [ ] cron-job.org 保活任务已启用并验证命中 `/healthz`
-- [ ] 自定义域名已在 Render 绑定并签发证书
-- [ ] REQUIREMENTS.md 的验收清单全部走通
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
 
-## 待核对
+证书用 certbot 签发即可。服务端已经开了 `trustProxy`，所以限流拿到的是 `X-Forwarded-For` 里的真实客户端 IP——反向代理必须设置上面那两个转发头，否则全校会被当成同一个 IP 限流。
 
-Render 免费档的具体额度数字（实例小时数、出网流量）以控制台实际条款为准，上线时核对并回填本节。
+## 备份
+
+整个数据库就是一个文件，连带 WAL 一起拷走就行。停服拷最稳，不停服则用 SQLite 自己的备份命令：
+
+```bash
+sqlite3 server/data/app.db ".backup '/var/backups/yysong-$(date +%F).db'"
+```
+
+排一条 crontab 每天跑一次、保留一两周即可。恢复就是把文件拷回 `server/data/app.db`（先停服，并清掉同名的 `-wal`、`-shm`）。
+
+## 升级
+
+```bash
+cd /opt/YangYiSongRequest
+git pull
+npm ci
+npm run build
+systemctl restart yysong
+```
+
+迁移由启动脚本自动执行。升级前先按上一节备份。
+
+## 待补
+
+服务器的系统、部署路径、域名还没定下来，上面的 `/opt/YangYiSongRequest`、`yysong` 用户名都是占位，实际部署时替换并回填本文件。
+
 

@@ -10,26 +10,26 @@
 
 - 使用者：全校学生（点歌，手机为主）+ 广播台管理员（审核排期，桌面为主）
 - 单一目标：把纸质点歌条搬到线上，并让台里当天要播的歌能一键拿到手。
-- 部署目标：Render 免费档 Web Service + Neon Postgres，绑定自有域名（阿里云注册，未备案）。
+- 部署目标：台里自有服务器，自托管。原计划的 Render 免费档 + Neon Postgres 已作废（2026-09-04）。
 - 仓库：https://github.com/Wemsur/YangYiSongRequest.git
 
 ## 2. 技术栈（已定，含理由）
 
 | 层 | 选型 | 理由 |
 | --- | --- | --- |
-| 运行时 | Node 20 + TypeScript | 单语言全栈；三家音源的成熟开源实现以 Node 居多 |
-| 后端框架 | Fastify | 轻量、启动快（免费档冷启动敏感）、流式响应友好（试听代理 / zip 打包） |
-| ORM | Prisma | 迁移可控、类型安全 |
-| 数据库 | Neon 免费 Postgres | 免费额度长期有效且独立于部署平台；Render 免费 Postgres 有有效期限制 |
+| 运行时 | Node 20+ + TypeScript | 单语言全栈；三家音源的成熟开源实现以 Node 居多 |
+| 后端框架 | Fastify | 轻量、启动快、流式响应友好（试听代理 / zip 打包） |
+| ORM | Prisma 7 | 迁移可控、类型安全 |
+| 数据库 | SQLite（`@prisma/adapter-better-sqlite3`） | 自托管有持久磁盘；一天几十到几百条写入，单文件零运维，备份就是拷一个文件 |
 | 前端 | Vue 3 + Vite + TypeScript | |
 | 样式 | Tailwind CSS + 自定义 token | 设计系统集中在 token 层，前台与后台共用 |
 | 前台组件 | 自写 | 视觉高度定制，组件库会拖累风格 |
 | 后台组件 | Naive UI | 表格、弹窗、日期选择器不自己造 |
 | 鉴权 | JWT（httpOnly cookie）+ argon2id | |
 | 测试 | Vitest | 重点覆盖音源适配器与排期冲突逻辑 |
-| 部署形态 | 单服务，Fastify 同时托管前端 dist | 免费档只占一个服务 |
+| 部署形态 | 单进程，Fastify 同时提供 API 与前端 dist | 少一个要维护的东西 |
 
-不使用 Docker：校内没有服务器，Render 直接用 Node 构建。
+数据库不需要 Docker，也不需要数据库服务器。若采纳上游音源项目做 sidecar，那两个服务用 Docker 起最省事，届时再定。
 
 ## 3. 音源
 
@@ -106,17 +106,19 @@
 ```
 YangYiSongRequest/
 ├─ server/
+│  ├─ data/               SQLite 数据库文件，不进版本库
 │  ├─ prisma/
 │  │  ├─ schema.prisma    数据模型的唯一准绳
 │  │  ├─ migrations/      迁移 SQL，随代码提交
 │  │  └─ seed.ts          种子：超管、时段、班数、站点开关
-│  ├─ prisma.config.ts    Prisma 7 的 CLI 配置（连接串、迁移目录、seed 命令）
+│  ├─ prisma.config.ts    Prisma 7 的 CLI 配置（数据库路径、迁移目录、seed 命令）
+│  ├─ scripts/            smoke-sources.ts 真实联调音源
 │  └─ src/
 │     ├─ app.ts          Fastify 实例与插件注册
 │     ├─ routes/         public/ 与 admin/ 两组路由
-│     ├─ sources/        netease.ts / qq.ts / kugou.ts + index.ts 聚合
+│     ├─ sources/        netease.ts / qq.ts / kugou.ts + index.ts 注册表
 │     ├─ services/       排期、审核、下载打包、敏感词、限流
-│     ├─ lib/            db、crypto、时区、日志、zip 流
+│     ├─ lib/            db、domain（取值与压平字段编解码）、crypto、时区、zip 流
 │     └─ generated/      Prisma client，不进版本库
 ├─ web/
 │  ├─ scripts/           build-wordmark.mjs 构建期生成标识 SVG
@@ -143,8 +145,9 @@ YangYiSongRequest/
 - 密码 argon2id；音源 Cookie 用 AES-256-GCM 加密存库，密钥取自环境变量 `CREDENTIAL_KEY`。
 - 提交与查询接口带 IP 限流，具体阈值见 REQUIREMENTS.md。
 - 数据模型只以 `server/prisma/schema.prisma` 为准，API.md 里那份是约束摘要，改 schema 要顺手更新它。
-- Prisma 7 的三处与旧版不同：`datasource` 块里不写 `url`（迁移连接串在 `server/prisma.config.ts`，运行时靠 `@prisma/adapter-pg` driver adapter）；生成的 client 必须指定 `output`，本项目在 `server/src/generated/prisma`，不进版本库；`prisma migrate diff` 的参数是 `--to-schema` 而不是旧的 `--to-schema-datamodel`。
-- `prisma.config.ts` 里用 `process.env.DATABASE_URL ?? ''` 而不是 prisma 的 `env()`：CLI 每次调用都会加载该文件，而 `prisma generate`、typecheck 并不需要连库，`env()` 缺变量时会直接抛错。
+- SQLite 存不了原生 enum、数组和 Json，所以：5 组取值全部存字符串，唯一来源是 `server/src/lib/domain.ts`（联合类型管编译期，`is*` 函数管运行期）；`flaggedWords` 与 `AuditLog.detail` 存 JSON 字符串，用 domain.ts 里的 encode/decode；日期一律存 `YYYY-MM-DD` 字符串按 Asia/Shanghai 解读，绕开时区偏移。
+- SQLite 相对路径有两套解析基准（CLI 按 schema 目录、运行时 adapter 按进程 cwd），所以 `DATABASE_URL` 里的相对路径在三处都统一解析成以 server 包目录为基准的绝对路径：`prisma.config.ts`、`src/config.ts`、`prisma/seed.ts`。改一处要改三处。
+- Prisma 7 的两处与旧版不同：`datasource` 块里不写 `url`（迁移路径在 `prisma.config.ts`，运行时靠 driver adapter）；生成的 client 必须指定 `output`，本项目在 `server/src/generated/prisma`，不进版本库。`prisma migrate diff` 的参数是 `--to-schema` 而不是旧的 `--to-schema-datamodel`。
 - 服务端类型检查走 `tsconfig.typecheck.json`（把 `prisma/*.ts`、`prisma.config.ts`、`scripts/*.ts` 和测试一起收进来），构建仍走 `tsconfig.json`，因为它的 `rootDir` 必须锁在 `src`，且要排掉 `*.test.ts` 不进 dist。
 - `NeteaseCloudMusicApi` 是 CJS，导出在运行时动态拼出来，cjs-module-lexer 认不出来，具名 ESM import 会在加载时报 `does not provide an export named`。只能 `createRequire` 取整个 `module.exports` 再套它自带的 `interface.d.ts` 类型，见 `sources/netease.ts` 顶部注释。它把搜索类型和音质等级声明成 `const enum`，运行时没有对应对象，传值时要按字面量断言。
 - TypeScript 由根 `overrides` 压在 6.0.3：vue-tsc 3.x 仍然 require `typescript/lib/tsc`，而 TS 7 的原生版本不再导出这个入口。想升到 7 之前先确认 vue-tsc 已支持。
@@ -152,9 +155,8 @@ YangYiSongRequest/
 
 ## 7. 已知风险
 
-- Render 免费档 15 分钟无请求即休眠，需外部定时 ping 保活，方案见 DEPLOY.md。
 - 三家音源都是逆向的非公开接口，随时可能变更或封禁，适配层必须保持可替换。
-- QQ 与酷狗没有会员账号，可下载音质可能不足以直接播出，这是已确认的取舍。
-- 域名未备案：指向境外 Render 可正常访问，但用不了国内 CDN。
+- QQ 与酷狗没有会员账号，可下载音质可能不足以直接播出，这是已确认的取舍。付费歌在 QQ 只有试听片段，在酷狗一个地址都没有；网易云配上会员 Cookie 后可取完整曲。
+- SQLite 单文件的代价是备份要靠自己：升级或迁移前先拷 `server/data/app.db` 及其 `-wal`、`-shm`。
 - 站内需有一页使用声明，说明音频来源与「仅用于校内广播」的用途限制。
 

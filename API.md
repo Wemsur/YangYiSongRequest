@@ -9,12 +9,12 @@
 
 | 模型 | 作用 | 关键约束 |
 | --- | --- | --- |
-| `SongRequest` | 一条点歌 | `queryCode` 唯一（6 位）；`grade` / `classNo` / `requesterName` 可空，对应关闭身份填写；`flaggedWords` 存敏感词命中；`isManual` 标记管理员补录 |
-| `Schedule` | 排期 | `(playDate, slotId, orderNo)` 唯一；`requestId` 唯一，一条点歌最多一个排期；删点歌级联删排期 |
+| `SongRequest` | 一条点歌 | `queryCode` 唯一（6 位）；`grade` / `classNo` / `requesterName` 可空，对应关闭身份填写；`flaggedWords` 是 JSON 数组字符串；`isManual` 标记管理员补录 |
+| `Schedule` | 排期 | `(playDate, slotId, orderNo)` 唯一；`playDate` 是 `YYYY-MM-DD` 字符串；`requestId` 唯一，一条点歌最多一个排期；删点歌级联删排期 |
 | `BroadcastSlot` | 播出时段 | `name` 唯一；`startTime` / `endTime` 是 `HH:mm` 字符串，按 Asia/Shanghai 解读；`maxCount` / `maxMs` 空表示不限；被排期引用时禁止删除 |
-| `CalendarDay` | 行政历 | 主键即日期；`kind` 为 `SCHOOL` / `OFF` / `EXAM_NO_BROADCAST`，只有 `SCHOOL` 可排期 |
+| `CalendarDay` | 行政历 | 主键就是 `YYYY-MM-DD` 字符串；`kind` 为 `SCHOOL` / `OFF` / `EXAM_NO_BROADCAST`，只有 `SCHOOL` 可排期 |
 | `AdminUser` | 管理员 | `username` 唯一；`role` 为 `SUPER` / `REVIEWER`；`mustChangePassword` 用于强制首次改密 |
-| `AuditLog` | 操作日志 | `actorId` 可空（账号删除后仍保留记录）；`detail` 为 JSON |
+| `AuditLog` | 操作日志 | `actorId` 可空（账号删除后仍保留记录）；`detail` 是 JSON 字符串 |
 | `GradeConfig` | 年级班数 | 主键即年级，默认 23 |
 | `BannedWord` | 敏感词 | 主键即词本身 |
 | `SourceCredential` | 音源凭据 | 主键即音源；`encryptedData` 为 AES-256-GCM 密文，iv 与 authTag 一并编码在内 |
@@ -29,7 +29,9 @@
 | `announcement` | 文本 | 空 | 首页公告 |
 | `maxScheduleDays` | 整数 | `14` | 最远可排多少天 |
 
-Prisma 7 的两处约定：`datasource` 块里不再写 `url`，迁移用的连接串来自 `server/prisma.config.ts`，运行时的来自 driver adapter（`server/src/lib/db.ts`）；生成的 client 落在 `server/src/generated/prisma`，不进版本库。
+数据库是 SQLite，存不了原生 enum、数组和 Json：上面所有「取值型」字段（`source`、`grade`、`status`、`kind`、`role`）都是字符串，合法取值与中文标签的唯一来源是 `server/src/lib/domain.ts`；`flaggedWords`、`detail` 是 JSON 字符串，用同一个文件里的 encode/decode 函数处理。
+
+Prisma 7 的两处约定：`datasource` 块里不再写 `url`，迁移用的数据库路径来自 `server/prisma.config.ts`，运行时的来自 driver adapter（`server/src/lib/db.ts`）；生成的 client 落在 `server/src/generated/prisma`，不进版本库。
 
 ## 前台接口
 

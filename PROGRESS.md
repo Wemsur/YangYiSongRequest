@@ -2,7 +2,7 @@
 
 > 每完成一步就更新这里。新会话靠它判断做到哪了。
 
-当前阶段：**S3 音源适配层已跑通，等 S4 指令；S2 的迁移与种子仍缺一个可连的 Postgres**
+当前阶段：**S1–S3 完成，数据库已建好并灌入种子，可以进 S4**
 
 ## 阶段计划
 
@@ -10,25 +10,29 @@
 | --- | --- | --- |
 | S0 | 需求确认 + 五份文档 | ✅ 完成 2026-08-31 |
 | S1 | 项目骨架：monorepo、TS 配置、Fastify 起服务、Vite 起前端、Tailwind token 落地 | ✅ 完成 2026-08-31 |
-| S2 | 数据模型：Prisma schema + 首次迁移 + 种子数据（超管、时段、班数） | 🔄 待连库执行 |
+| S2 | 数据模型：Prisma schema + 首次迁移 + 种子数据（超管、时段、班数） | ✅ 完成 2026-09-04 |
 | S3 | 音源适配层：三家 search/detail/streamUrl/downloadUrl/lyric + Vitest + 可用性自检 | ✅ 完成 2026-09-04 |
 | S4 | 前台：搜索 tab、试听代理、点歌弹窗与提交、查询码查询 | ⬜ |
 | S5 | 前台：最近歌单与过往歌单 | ⬜ |
 | S6 | 后台：登录鉴权、分权、审核排期、拖拽调序、AuditLog | ⬜ |
 | S7 | 后台：配置页（时段、行政历、班数、敏感词、音源扫码登录、账号） | ⬜ |
 | S8 | 下载：单曲代理 + 按天流式 zip + ID3 + 歌词 | ⬜ |
-| S9 | 部署：Render + Neon + 保活 + 域名，验收清单跑一遍 | ⬜ |
+| S9 | 部署：自有服务器 + systemd + 反向代理，验收清单跑一遍 | ⬜ |
 
 ## 待办与悬而未决
 
-- [ ] **需要一个可连的 Postgres**：Neon 连接串填进 `server/.env` 的 `DATABASE_URL`（或本地起一个），然后 `npx prisma migrate deploy` + `npm run seed --workspace server`，S2 才算跑通。本机 Docker 已装但守护进程没开，所以没在本地起库。
+- [ ] **音源是否改用上游 sidecar**：[MakcRe/KuGouMusicApi](https://github.com/MakcRe/KuGouMusicApi)（926 star，2026-09-02 有推送）与 [Rain120/qq-music-api](https://github.com/Rain120/qq-music-api)（1067 star，2026-09-04 有推送）都在活跃维护，且实现了酷狗的签名取址、三家的扫码登录。自写适配器已跑通可作兜底，等台里决定。
+- [ ] 服务器信息：系统、部署路径、域名待定，DEPLOY.md 里现在是占位值
 - [ ] 网易云会员 Cookie：待 S7 完成后由管理员在后台扫码登录写入，不经聊天传递
-- [ ] 三个音源的具体开源实现需在 S3 实测后定稿，把最终选定的包名与版本写回 CONTEXT.md
 - [ ] 台标 / 校徽：暂无，先用文字标识「杨一之声」，拿到素材再替换
 - [ ] 法定假日数据：S7 先做手工标记，后续可考虑接节假日数据源
-- [ ] Render 免费档实际额度条款以控制台为准，S9 时核对并回填 DEPLOY.md
 
 ## 变更记录
+
+- 2026-09-04 部署方案换成台里自有服务器，数据库从 Neon Postgres 换成 SQLite（`@prisma/adapter-better-sqlite3`）。理由：自托管有持久磁盘，当初选 Postgres 就是为了绕开 Render 免费档磁盘不持久，这个约束消失了；一天几十到几百条写入用单文件足够，备份就是拷一个文件，不用 Docker 也不用数据库服务器。
+  - 代价与处理：Prisma 的 SQLite 连接器不支持原生 enum、数组和 Json，于是 5 组取值改存字符串并把唯一来源收进 `server/src/lib/domain.ts`（联合类型 + `is*` 校验 + 标签），`flaggedWords` 与 `AuditLog.detail` 改存 JSON 字符串，日期改存 `YYYY-MM-DD` 字符串。趁迁移一次都还没跑过时改，成本最低。
+  - SQLite 相对路径在 CLI 与运行时有两套解析基准，已在 `prisma.config.ts`、`src/config.ts`、`prisma/seed.ts` 三处统一解析成绝对路径，改一处要改三处。
+  - 迁移与种子已真实执行：`server/data/app.db` 建好，超管 yadmin、午间档与晚间档、每年级 23 班、四个站点开关都已落库并读回验证。DEPLOY.md 重写为自托管版（systemd + Nginx + SQLite 备份）。
 
 - 2026-09-04 S3 音源适配层完成：统一 `MusicSource` 契约 + 三家实现 + 注册表 + 体检接口，18 个单测（mock fetch，只测归一化与音质挑选逻辑），外加 `npm run smoke:sources --workspace server` 做真实联调。实测三家的搜索、详情、试听、下载、歌词、封面全部通，具体能拿到什么音质见 CONTEXT.md 第 3 节。
   - 定稿：网易云用 `NeteaseCloudMusicApi` npm 包；QQ 与酷狗自写适配器（对应的开源项目都没发 npm 包，且它们本身是独立服务，塞进免费档实例不划算）。

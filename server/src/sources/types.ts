@@ -3,8 +3,12 @@
  * CookieProvider 注入，这样单测不用起库，将来换实现也只动一个文件。
  */
 
-export const SOURCE_IDS = ['netease', 'qq', 'kugou'] as const
-export type SourceId = (typeof SOURCE_IDS)[number]
+import { SOURCES } from '../lib/domain.js'
+import type { SourceId } from '../lib/domain.js'
+
+// 取值的唯一来源在 lib/domain.ts（数据库里存的就是这些字符串），这里只做转出
+export const SOURCE_IDS = SOURCES
+export type { SourceId }
 
 export const SOURCE_LABELS: Record<SourceId, string> = {
   netease: '网易云音乐',

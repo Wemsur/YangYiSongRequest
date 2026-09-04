@@ -1,15 +1,24 @@
 // 种子数据：初始超管、两个播出时段、三个年级的班数、站点开关。
 // 全部幂等，可重复执行：`npm run seed --workspace server`
+import { mkdirSync } from 'node:fs'
+import path from 'node:path'
 import 'dotenv/config'
 import { randomBytes } from 'node:crypto'
 import { hash } from '@node-rs/argon2'
-import { PrismaPg } from '@prisma/adapter-pg'
+import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3'
 import { PrismaClient } from '../src/generated/prisma/client.js'
 
-const url = process.env.DATABASE_URL
-if (!url) throw new Error('缺少环境变量 DATABASE_URL，见 server/.env.example')
+// 和 src/config.ts、prisma.config.ts 同一套路径解析：相对 server 包目录
+const sqliteFile = path.resolve(
+  import.meta.dirname,
+  '..',
+  (process.env.DATABASE_URL ?? 'file:./data/app.db').replace(/^file:/, ''),
+)
+mkdirSync(path.dirname(sqliteFile), { recursive: true })
 
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: url }) })
+const prisma = new PrismaClient({
+  adapter: new PrismaBetterSqlite3({ url: `file:${sqliteFile}` }),
+})
 
 /** 台里现行时段；上限按每首约 4 分钟估，管理员可在后台调整 */
 const SLOTS = [

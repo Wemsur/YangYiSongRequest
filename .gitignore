@@ -1,6 +1,7 @@
 node_modules/
 dist/
 server/src/generated/
+server/data/
 .env
 .env.*
 !.env.example

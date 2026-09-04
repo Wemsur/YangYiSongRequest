@@ -1,12 +1,13 @@
-import { PrismaPg } from '@prisma/adapter-pg'
+import { mkdirSync } from 'node:fs'
+import path from 'node:path'
+import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3'
 import { PrismaClient } from '../generated/prisma/client.js'
 import { config } from '../config.js'
 
-if (!config.databaseUrl) {
-  throw new Error('缺少环境变量 DATABASE_URL，配置方法见 DEPLOY.md 与 server/.env.example')
-}
+// 首次启动时数据目录可能还不存在，better-sqlite3 不会自己建目录
+mkdirSync(path.dirname(config.sqliteFile), { recursive: true })
 
-const adapter = new PrismaPg({ connectionString: config.databaseUrl })
+const adapter = new PrismaBetterSqlite3({ url: `file:${config.sqliteFile}` })
 
 export const prisma = new PrismaClient({
   adapter,

@@ -1,5 +1,12 @@
 // 数据模型的说明性文档在 API.md，改这里就要同步那份。
 // 生成的 client 落在 server/src/generated/prisma，不进版本库。
+//
+// 用 SQLite：自托管服务器有持久磁盘，这套系统一天几十到几百条写入，单文件零运维，
+// 备份就是拷一个文件。代价是 Prisma 的 SQLite 连接器不支持原生 enum、数组和 Json，于是：
+//   - 原来的 5 个 enum 一律存字符串，取值由 src/lib/enums.ts 的联合类型与校验函数把关
+//   - flaggedWords 存 JSON 数组字符串
+//   - 日期存 "YYYY-MM-DD" 字符串，按 Asia/Shanghai 解读，天然避开时区偏移
+//   - AuditLog.detail 存 JSON 字符串
 
 generator client {
   provider     = "prisma-client"
@@ -7,65 +14,33 @@ generator client {
   moduleFormat = "esm"
 }
 
-// Prisma 7 起 datasource 里不再写 url：迁移的连接串来自 prisma.config.ts，
-// 运行时的来自 PrismaClient 的 driver adapter（src/lib/db.ts）。
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
 }
 
-enum Source {
-  NETEASE
-  QQ
-  KUGOU
-}
-
-enum Grade {
-  G1
-  G2
-  G3
-}
-
-enum RequestStatus {
-  PENDING
-  SCHEDULED
-  PLAYED
-  REJECTED
-}
-
-enum DayKind {
-  SCHOOL
-  OFF
-  EXAM_NO_BROADCAST
-}
-
-enum AdminRole {
-  SUPER
-  REVIEWER
-}
-
-/// 一条点歌。身份三项（grade / classNo / requesterName）在超管关闭「要求填写身份」时为空。
+/// 一条点歌。身份三项在超管关闭「要求填写身份」时为空。
 model SongRequest {
-  id            String        @id @default(cuid())
-  queryCode     String        @unique @db.VarChar(6)
-  source        Source
+  id            String     @id @default(cuid())
+  queryCode     String     @unique
+  source        String // netease | qq | kugou
   platformId    String
   title         String
   artist        String
   album         String?
   durationMs    Int
   coverUrl      String?
-  grade         Grade?
+  grade         String? // G1 | G2 | G3
   classNo       Int?
   requesterName String?
-  status        RequestStatus @default(PENDING)
+  status        String     @default("PENDING") // PENDING | SCHEDULED | PLAYED | REJECTED
   rejectReason  String?
-  flaggedWords  String[]
-  isManual      Boolean       @default(false)
+  flaggedWords  String     @default("[]") // JSON 数组字符串
+  isManual      Boolean    @default(false)
   submitIp      String
-  createdAt     DateTime      @default(now())
+  createdAt     DateTime   @default(now())
   reviewedAt    DateTime?
   reviewedById  String?
-  reviewedBy    AdminUser?    @relation(fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedBy    AdminUser? @relation(fields: [reviewedById], references: [id], onDelete: SetNull)
   schedule      Schedule?
 
   @@index([status, createdAt])
@@ -78,7 +53,7 @@ model Schedule {
   id        String        @id @default(cuid())
   requestId String        @unique
   request   SongRequest   @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  playDate  DateTime      @db.Date
+  playDate  String // YYYY-MM-DD
   slotId    String
   slot      BroadcastSlot @relation(fields: [slotId], references: [id], onDelete: Restrict)
   orderNo   Int
@@ -92,8 +67,8 @@ model Schedule {
 model BroadcastSlot {
   id        String     @id @default(cuid())
   name      String     @unique
-  startTime String     @db.VarChar(5)
-  endTime   String     @db.VarChar(5)
+  startTime String
+  endTime   String
   maxCount  Int?
   maxMs     Int?
   sortOrder Int        @default(0)
@@ -103,8 +78,8 @@ model BroadcastSlot {
 
 /// 行政历。只有 SCHOOL 的日期可以排期。
 model CalendarDay {
-  date DateTime @id @db.Date
-  kind DayKind
+  date String  @id // YYYY-MM-DD
+  kind String // SCHOOL | OFF | EXAM_NO_BROADCAST
   note String?
 }
 
@@ -112,7 +87,7 @@ model AdminUser {
   id                 String        @id @default(cuid())
   username           String        @unique
   passwordHash       String
-  role               AdminRole     @default(REVIEWER)
+  role               String        @default("REVIEWER") // SUPER | REVIEWER
   mustChangePassword Boolean       @default(false)
   disabled           Boolean       @default(false)
   lastLoginAt        DateTime?
@@ -127,7 +102,7 @@ model AuditLog {
   actor     AdminUser? @relation(fields: [actorId], references: [id], onDelete: SetNull)
   action    String
   targetId  String?
-  detail    Json?
+  detail    String? // JSON 字符串
   createdAt DateTime   @default(now())
 
   @@index([createdAt])
@@ -135,7 +110,7 @@ model AuditLog {
 
 /// 每个年级的班级数量，超管可调。
 model GradeConfig {
-  grade      Grade @id
+  grade      String @id // G1 | G2 | G3
   classCount Int
 }
 
@@ -146,7 +121,7 @@ model BannedWord {
 
 /// 音源账号凭据。encryptedData 是 AES-256-GCM 密文，iv 与 authTag 一并编码在内。
 model SourceCredential {
-  source        Source    @id
+  source        String    @id // netease | qq | kugou
   encryptedData String
   updatedAt     DateTime  @updatedAt
   lastCheckAt   DateTime?
@@ -161,5 +136,3 @@ model SiteSetting {
   key   String @id
   value String
 }
-
-
