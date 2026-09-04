@@ -33,20 +33,29 @@
 
 ## 3. 音源
 
-统一适配层 `server/src/sources/`，每个音源实现同一接口：`search / detail / streamUrl / downloadUrl / lyric`。任一音源抛错只影响自己的搜索 tab，前端该 tab 显示「此音源暂时不可用」，其余照常。
+统一适配层 `server/src/sources/`，每个音源实现同一接口：`search / detail / streamTarget / downloadTarget / lyric / health`（见 `types.ts` 的 `MusicSource`）。任一音源抛错只影响自己的搜索 tab，前端该 tab 显示「此音源暂时不可用」，其余照常。
 
-| 音源 | 候选实现 | 会员 Cookie |
+选定实现与实测结论（2026-09-04 用 `npm run smoke:sources --workspace server` 跑通）：
+
+| 音源 | 实现方式 | 无会员时能拿到什么 |
 | --- | --- | --- |
-| 网易云音乐 | NeteaseCloudMusicApi 的活跃续作（api-enhanced 系） | 有，管理员提供，可取高音质 |
-| QQ 音乐 | Rain120/qq-music-api，或自写薄适配器 | 无 |
-| 酷狗音乐 | MakcRe/KuGouMusicApi | 无 |
+| 网易云音乐 | `NeteaseCloudMusicApi` npm 包（2026-05 仍在发布），封装了加密协议和扫码登录 | 免费歌能到 320k；付费歌只有约 35 秒试听片段 |
+| QQ 音乐 | 自写适配器，走 `u.y.qq.com/cgi-bin/musicu.fcg` 的 POST 协议 | 免费歌 128k（M500）或 m4a（C400）；付费歌只有 RS02 试听片段 |
+| 酷狗音乐 | 自写适配器：`songsearch.kugou.com` 搜索 + `m.kugou.com/app/i/getSongInfo.php` 取址 | Privilege 0/8 的歌能到 128k 完整曲；Privilege 10 一个地址都没有 |
+
+踩过的坑，换实现前先看这几条：
+
+- QQ 的 `c.y.qq.com/soso/fcgi-bin/client_search_cgi` 已经 404，别再用。musicu 的返回是两层 code，子请求 code 为 2001 时数据结构照样在但全空，那是风控或要求登录，必须显式报错而不是当成「没搜到」。同 IP 连续请求几十次就会触发。
+- QQ 取址要 `media_mid` 而不是 `mid`，得先调 `music.pf_song_detail_svr/get_song_detail_yqq` 拿到。文件名前缀决定音质：F000 flac、M800 320k、M500 128k、C400 m4a、RS02 试听片段。
+- 酷狗 `mobilecdn` / `msearchcdn` 的 TLS 证书 altname 不匹配，HTTPS 直接连不上；`songsearch.kugou.com` 正常。`play/getdata` 和老的 trackercdn 都要签名，已经不通。
+- 酷狗付费歌的 `getSongInfo` 把时长和码率一律返回 0，需要回搜一次补时长。
 
 约定：
 
 - 不做跨源匹配下载。学生从 QQ/酷狗点的歌就用该源自己的地址下载；拿不到高音质就在后台标注实际码率，由管理员决定是否驳回。
-- Cookie 由管理员在后台「音源账号」页配置，AES-256-GCM 加密存库，绝不写进代码或提交到仓库。
+- Cookie 由管理员在后台「音源账号」页配置，AES-256-GCM 加密存库，绝不写进代码或提交到仓库。适配层通过注入的 `CookieProvider` 取 Cookie，自己不碰数据库。
 - 网易云走官方扫码登录接口拿 Cookie（后台显示二维码，用网易云 App 扫码）。内嵌官方登录页不可行，对方站点有 X-Frame-Options 限制。
-- 这些都是第三方非公开接口，随时可能失效。适配层必须可单独替换，并提供可用性自检端点供后台查看。
+- 这些都是第三方非公开接口，随时可能失效。`npm test` 只测归一化逻辑（mock 掉 fetch），真实连通性靠 `smoke:sources` 手动跑。
 
 ## 4. 设计系统
 
@@ -136,7 +145,8 @@ YangYiSongRequest/
 - 数据模型只以 `server/prisma/schema.prisma` 为准，API.md 里那份是约束摘要，改 schema 要顺手更新它。
 - Prisma 7 的三处与旧版不同：`datasource` 块里不写 `url`（迁移连接串在 `server/prisma.config.ts`，运行时靠 `@prisma/adapter-pg` driver adapter）；生成的 client 必须指定 `output`，本项目在 `server/src/generated/prisma`，不进版本库；`prisma migrate diff` 的参数是 `--to-schema` 而不是旧的 `--to-schema-datamodel`。
 - `prisma.config.ts` 里用 `process.env.DATABASE_URL ?? ''` 而不是 prisma 的 `env()`：CLI 每次调用都会加载该文件，而 `prisma generate`、typecheck 并不需要连库，`env()` 缺变量时会直接抛错。
-- 服务端类型检查走 `tsconfig.typecheck.json`（把 `prisma/*.ts` 和 `prisma.config.ts` 一起收进来），构建仍走 `tsconfig.json`，因为它的 `rootDir` 必须锁在 `src`。
+- 服务端类型检查走 `tsconfig.typecheck.json`（把 `prisma/*.ts`、`prisma.config.ts`、`scripts/*.ts` 和测试一起收进来），构建仍走 `tsconfig.json`，因为它的 `rootDir` 必须锁在 `src`，且要排掉 `*.test.ts` 不进 dist。
+- `NeteaseCloudMusicApi` 是 CJS，导出在运行时动态拼出来，cjs-module-lexer 认不出来，具名 ESM import 会在加载时报 `does not provide an export named`。只能 `createRequire` 取整个 `module.exports` 再套它自带的 `interface.d.ts` 类型，见 `sources/netease.ts` 顶部注释。它把搜索类型和音质等级声明成 `const enum`，运行时没有对应对象，传值时要按字面量断言。
 - TypeScript 由根 `overrides` 压在 6.0.3：vue-tsc 3.x 仍然 require `typescript/lib/tsc`，而 TS 7 的原生版本不再导出这个入口。想升到 7 之前先确认 vue-tsc 已支持。
 - 组件的 scoped 样式属于「无层」CSS，按层叠层规则会压过 Tailwind 在 `@layer utilities` 里的工具类，特异性再低也一样（`:where()` 也救不了）。所以组件根元素不要写 display 之类会被调用方覆盖的属性，显隐一律交给外层元素控制，见 `web/src/components/Wordmark.vue` 的注释。
 

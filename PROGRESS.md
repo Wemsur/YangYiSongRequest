@@ -2,7 +2,7 @@
 
 > 每完成一步就更新这里。新会话靠它判断做到哪了。
 
-当前阶段：**S2 schema、迁移 SQL、种子脚本已就绪，等一个可连的 Postgres 才能实际执行**
+当前阶段：**S3 音源适配层已跑通，等 S4 指令；S2 的迁移与种子仍缺一个可连的 Postgres**
 
 ## 阶段计划
 
@@ -11,7 +11,7 @@
 | S0 | 需求确认 + 五份文档 | ✅ 完成 2026-08-31 |
 | S1 | 项目骨架：monorepo、TS 配置、Fastify 起服务、Vite 起前端、Tailwind token 落地 | ✅ 完成 2026-08-31 |
 | S2 | 数据模型：Prisma schema + 首次迁移 + 种子数据（超管、时段、班数） | 🔄 待连库执行 |
-| S3 | 音源适配层：三家 search/detail/streamUrl/downloadUrl/lyric + Vitest + 可用性自检 | ⬜ |
+| S3 | 音源适配层：三家 search/detail/streamUrl/downloadUrl/lyric + Vitest + 可用性自检 | ✅ 完成 2026-09-04 |
 | S4 | 前台：搜索 tab、试听代理、点歌弹窗与提交、查询码查询 | ⬜ |
 | S5 | 前台：最近歌单与过往歌单 | ⬜ |
 | S6 | 后台：登录鉴权、分权、审核排期、拖拽调序、AuditLog | ⬜ |
@@ -29,6 +29,11 @@
 - [ ] Render 免费档实际额度条款以控制台为准，S9 时核对并回填 DEPLOY.md
 
 ## 变更记录
+
+- 2026-09-04 S3 音源适配层完成：统一 `MusicSource` 契约 + 三家实现 + 注册表 + 体检接口，18 个单测（mock fetch，只测归一化与音质挑选逻辑），外加 `npm run smoke:sources --workspace server` 做真实联调。实测三家的搜索、详情、试听、下载、歌词、封面全部通，具体能拿到什么音质见 CONTEXT.md 第 3 节。
+  - 定稿：网易云用 `NeteaseCloudMusicApi` npm 包；QQ 与酷狗自写适配器（对应的开源项目都没发 npm 包，且它们本身是独立服务，塞进免费档实例不划算）。
+  - 四个踩坑点已写进 CONTEXT.md 第 3 节：QQ 老搜索接口 404、QQ 风控返回 code 2001 且数据全空、酷狗 CDN 证书 altname 不匹配、酷狗付费歌时长返回 0。
+  - 网易云那个包是 CJS 且导出动态拼装，只能 createRequire 引入，已记进 CONTEXT.md 第 6 节。
 
 - 2026-08-31 S2 数据模型落地：10 个模型（点歌、排期、时段、行政历、管理员、操作日志、班数、敏感词、音源凭据、站点开关）、初始迁移 SQL、幂等种子脚本（超管 yadmin、午间档 12:00–12:30 与晚间档 17:40–18:00、每年级 23 班、四个站点开关）。`prisma validate`、`prisma generate`、`npm run typecheck`、`npm run build` 均通过，tsx 也能解析生成的 client；迁移与种子的实际执行等数据库连接串。
   - Prisma 7 的三处差异已写进 CONTEXT.md 第 6 节：datasource 不写 url、生成目录必须显式指定、`migrate diff` 参数改名。
