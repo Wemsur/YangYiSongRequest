@@ -128,8 +128,9 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   }
 
   const text = await response.text();
+  let data: unknown;
   try {
-    const data = text ? JSON.parse(text) : null;
+    data = text ? JSON.parse(text) : null;
     if (!response.ok) {
       const payload = data as { error?: { code?: string; message?: string } } | null;
       throw new ApiError(
