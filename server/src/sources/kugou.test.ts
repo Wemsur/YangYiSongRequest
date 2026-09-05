@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createKugouSource } from './kugou.js'
 
 const noCookie = async () => null
+/** 单测只验归一化逻辑，关掉上游 sidecar 这条路 */
+const kugou = () => createKugouSource(noCookie, { upstreamUrl: '' })
 
 /** 用返回体工厂替掉全局 fetch，只测归一化逻辑，不碰真实接口 */
 function stubFetch(reply: (url: string) => unknown) {
@@ -28,7 +30,7 @@ afterEach(() => {
 describe('酷狗搜索归一化', () => {
   it('去掉高亮标签、补全封面尺寸、秒转毫秒、标出付费', async () => {
     stubFetch(() => ({ status: 1, data: { total: 480, lists: [searchItem] } }))
-    const page = await createKugouSource(noCookie).search('起风了', 1, 20)
+    const page = await kugou().search('起风了', 1, 20)
 
     expect(page.total).toBe(480)
     expect(page.songs).toHaveLength(1)
@@ -48,7 +50,7 @@ describe('酷狗搜索归一化', () => {
 describe('酷狗取址', () => {
   it('付费歌拿不到地址时返回 null', async () => {
     stubFetch(() => ({ status: 0, errcode: 0, songName: '海阔天空', url: '' }))
-    const target = await createKugouSource(noCookie).streamTarget('ABC')
+    const target = await kugou().streamTarget('ABC')
     expect(target).toBeNull()
   })
 
@@ -62,7 +64,7 @@ describe('酷狗取址', () => {
       extName: 'mp3',
       fileSize: 5_000_000,
     }))
-    const target = await createKugouSource(noCookie).streamTarget('ABC')
+    const target = await kugou().streamTarget('ABC')
     expect(target).toMatchObject({
       url: 'https://sharefs.kugou.com/x.mp3',
       bitrateKbps: 128,
@@ -79,7 +81,7 @@ describe('酷狗取址', () => {
         ? { status: 0, errcode: 0, songName: '海阔天空', choricSinger: 'BEYOND', timeLength: 0, url: '' }
         : { status: 1, data: { total: 1, lists: [{ ...searchItem, FileHash: 'ABC', Duration: 324 }] } },
     )
-    const summary = await createKugouSource(noCookie).detail('ABC')
+    const summary = await kugou().detail('ABC')
     expect(summary).toMatchObject({ title: '海阔天空', artist: 'BEYOND', durationMs: 324_000, vip: true })
   })
 })

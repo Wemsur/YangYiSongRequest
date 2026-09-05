@@ -1,56 +1,68 @@
-// 音源联调：真的去打三家接口，看搜索 / 详情 / 试听 / 下载 / 歌词还通不通。
-// 这些都是第三方非公开接口，随时可能变，所以不进 npm test（那套只测归一化逻辑）。
-// 手动跑：npm run smoke:sources --workspace server
-import { allSources } from '../src/sources/index.js'
+// 联网实测三家音源，走的是我们自己的适配层，不是裸接口。
+// 不放进 vitest：单测不该依赖外网和第三方可用性。
+// 跑法：npm run smoke:sources --workspace server [关键词]
+import 'dotenv/config'
+import { allSources, checkAll } from '../src/sources/index.js'
 import type { AudioTarget } from '../src/sources/index.js'
 
-const KEYWORD = process.argv[2] ?? '周杰伦'
+const keyword = process.argv[2] ?? '起风了'
+const ms = (value: number) => `${Math.round(value / 1000)}s`
+const short = (value: string | undefined, len = 52) =>
+  value ? (value.length > len ? `${value.slice(0, len)}…` : value) : '(空)'
+const isTarget = (value: unknown): value is AudioTarget =>
+  !!value && typeof value === 'object' && 'url' in value
 
-const show = (target: AudioTarget | null) =>
-  target
-    ? `${target.bitrateKbps ?? '?'}k ${target.format ?? '?'}${target.preview ? ' (试听片段)' : ''}`
-    : '拿不到'
-
-let failed = 0
+console.log('=== 音源体检 ===')
+for (const health of await checkAll()) {
+  console.log(
+    `${health.label.padEnd(12)} ${health.ok ? '正常' : '异常'}  ${health.detail}` +
+      `${health.hasCredential ? '  [已配 Cookie]' : ''}`,
+  )
+}
 
 for (const source of allSources()) {
-  console.log(`\n=== ${source.label} ===`)
-  const health = await source.health()
-  console.log(`体检：${health.ok ? '通' : '不通'}｜${health.detail}｜凭据：${health.hasCredential ? '已配' : '无'}`)
-  if (!health.ok) {
-    failed += 1
-    continue
-  }
-
+  console.log(`\n=== ${source.label}：搜索「${keyword}」 ===`)
   try {
-    const page = await source.search(KEYWORD, 1, 3)
-    console.log(`搜索：命中 ${page.total} 条，取回 ${page.songs.length} 条`)
+    const page = await source.search(keyword, 1, 3)
+    console.log(`共 ${page.total} 条，取前 ${page.songs.length} 条：`)
     for (const song of page.songs) {
-      console.log(`  ${song.title} / ${song.artist}  ${Math.round(song.durationMs / 1000)}s  ${song.vip ? '付费' : '免费'}`)
+      console.log(
+        `  ${short(song.title, 18).padEnd(20)} ${short(song.artist, 14).padEnd(16)} ` +
+          `${ms(song.durationMs).padEnd(6)} ${song.vip ? '会员' : '免费'}  ${song.platformId}`,
+      )
     }
 
     const first = page.songs[0]
-    if (!first) {
-      failed += 1
-      continue
-    }
+    if (!first) continue
 
-    const [detail, stream, download, lyric] = await Promise.all([
+    const [detail, stream, download, lyric] = await Promise.allSettled([
       source.detail(first.platformId),
       source.streamTarget(first.platformId),
       source.downloadTarget(first.platformId),
-      source.lyric(first.platformId).catch(() => null),
+      source.lyric(first.platformId),
     ])
-    console.log(`详情：${detail ? `${detail.title} / ${detail.artist} ${Math.round(detail.durationMs / 1000)}s` : '拿不到'}`)
-    console.log(`试听：${show(stream)}`)
-    console.log(`下载：${show(download)}`)
-    console.log(`歌词：${lyric ? `${lyric.split('\n').length} 行` : '拿不到'}`)
-    console.log(`封面：${detail?.coverUrl ? '有' : '无'}`)
+
+    const describe = (result: PromiseSettledResult<unknown>): string => {
+      if (result.status === 'rejected') {
+        const reason: unknown = result.reason
+        return `抛错 ${reason instanceof Error ? reason.message : String(reason)}`
+      }
+      const value = result.value
+      if (value === null || value === undefined) return '(拿不到)'
+      if (isTarget(value)) {
+        return `${value.bitrateKbps ?? '?'}kbps ${value.preview ? '试听片段' : '完整'} ${short(value.url, 46)}`
+      }
+      if (typeof value === 'object' && 'title' in value) {
+        return String((value as { title: unknown }).title)
+      }
+      return short(String(value).replace(/\s+/g, ' '), 46)
+    }
+
+    console.log(`  详情    ${describe(detail)}`)
+    console.log(`  试听    ${describe(stream)}`)
+    console.log(`  下载    ${describe(download)}`)
+    console.log(`  歌词    ${describe(lyric)}`)
   } catch (error) {
-    failed += 1
-    console.log(`失败：${error instanceof Error ? error.message : String(error)}`)
+    console.log(`  失败：${error instanceof Error ? error.message : String(error)}`)
   }
 }
-
-console.log(`\n${failed === 0 ? '三家音源都通' : `${failed} 家音源有问题`}`)
-process.exit(failed === 0 ? 0 : 1)

@@ -5,6 +5,8 @@
 //   - 歌词是两步：krcs 搜候选 → lyrics 下载 base64 的 LRC。
 import { fetchJson } from './http.js'
 import { joinArtists } from './types.js'
+import { resetUpstreamDevice, upstreamPing, upstreamSongUrl } from './kugou-upstream.js'
+import { config } from '../config.js'
 import type {
   AudioTarget,
   CookieProvider,
@@ -96,7 +98,13 @@ async function fetchInfo(hash: string, cookie: string | null = null) {
   })
 }
 
-export function createKugouSource(getCookie: CookieProvider): MusicSource {
+export interface KugouOptions {
+  /** 上游 kugoumusicapi 的地址；传空串就只用直连实现（单测走这条） */
+  upstreamUrl?: string
+}
+
+export function createKugouSource(getCookie: CookieProvider, options: KugouOptions = {}): MusicSource {
+  const upstreamUrl = options.upstreamUrl ?? config.kugouApiUrl
   return {
     id: 'kugou',
     label: '酷狗音乐',
@@ -143,11 +151,11 @@ export function createKugouSource(getCookie: CookieProvider): MusicSource {
 
     // 酷狗只有一档 128k，试听和下载走同一个地址；拿不到就是付费歌曲。
     async streamTarget(platformId) {
-      return resolveTarget(platformId, await getCookie('kugou'))
+      return resolveTarget(platformId, await getCookie('kugou'), upstreamUrl)
     },
 
     async downloadTarget(platformId) {
-      return resolveTarget(platformId, await getCookie('kugou'))
+      return resolveTarget(platformId, await getCookie('kugou'), upstreamUrl)
     },
 
     async lyric(platformId) {
@@ -166,18 +174,21 @@ export function createKugouSource(getCookie: CookieProvider): MusicSource {
 
     async health(): Promise<SourceHealth> {
       const cookie = await getCookie('kugou')
+      const upstream = upstreamUrl ? await upstreamPing(upstreamUrl) : null
+      const upstreamNote =
+        upstream === null ? '' : upstream ? '，上游取址服务在线' : '，上游取址服务离线（已回落直连）'
       try {
         const body = await fetchSearch('周杰伦', 1, 1)
         const ok = body.status === 1 && (body.data?.lists?.length ?? 0) > 0
         return {
           ok,
-          detail: ok ? '搜索正常' : '搜索返回空结果',
+          detail: `${ok ? '搜索正常' : '搜索返回空结果'}${upstreamNote}`,
           hasCredential: !!cookie,
         }
       } catch (error) {
         return {
           ok: false,
-          detail: error instanceof Error ? error.message : '未知错误',
+          detail: `${error instanceof Error ? error.message : '未知错误'}${upstreamNote}`,
           hasCredential: !!cookie,
         }
       }
@@ -185,7 +196,26 @@ export function createKugouSource(getCookie: CookieProvider): MusicSource {
   }
 }
 
-async function resolveTarget(platformId: string, cookie: string | null): Promise<AudioTarget | null> {
+/** 上游 sidecar 连不上时的静默期，免得每次取址都白等一次超时 */
+let upstreamDownUntil = 0
+
+async function resolveTarget(
+  platformId: string,
+  cookie: string | null,
+  upstreamUrl: string,
+): Promise<AudioTarget | null> {
+  // 先问上游 kugoumusicapi：它带请求签名，配上会员 Cookie 能出高音质
+  if (upstreamUrl && Date.now() >= upstreamDownUntil) {
+    try {
+      const target = await upstreamSongUrl(upstreamUrl, { hash: platformId }, cookie)
+      if (target) return target
+    } catch {
+      // sidecar 没起或挂了：回落到直连实现，一分钟内不再重试
+      upstreamDownUntil = Date.now() + 60_000
+      resetUpstreamDevice()
+    }
+  }
+
   const info = await fetchInfo(platformId, cookie)
   const url = info.url || info.backup_url?.[0]
   if (!url) return null

@@ -71,6 +71,29 @@ WantedBy=multi-user.target
 
 然后 `systemctl enable --now yysong`。用 pm2 也可以，效果一样，只是多一个要维护的东西。
 
+酷狗取址服务是第二个进程，同样给它一个 unit，`/etc/systemd/system/yysong-kugou.service`：
+
+```ini
+[Unit]
+Description=杨一之声 · 酷狗上游取址服务
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/YangYiSongRequest/server
+ExecStart=/usr/bin/npm run kugou-api
+Restart=always
+RestartSec=5
+User=yysong
+
+[Install]
+WantedBy=multi-user.target
+```
+
+它只监听本机的 3300，不要暴露到公网——那上面的接口没有任何鉴权。主服务通过 `KUGOU_API_URL` 找它；这个服务挂了酷狗不会整源不可用，取址会自动回落到直连实现，只是付费歌的高音质拿不到。
+
+设备标识（`KUGOU_API_GUID` 等四项）建议写死在 `server/.env` 里。酷狗对频繁变化的设备指纹会加限制，每次重启换一套等于每次都是新设备。首次启动时日志会打印临时生成的那套，抄下来即可。
+
 ## 反向代理与 HTTPS
 
 服务本身只监听 HTTP。要绑域名和证书，前面挂一层 Nginx：

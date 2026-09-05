@@ -21,13 +21,18 @@
 
 ## 待办与悬而未决
 
-- [ ] **音源是否改用上游 sidecar**：[MakcRe/KuGouMusicApi](https://github.com/MakcRe/KuGouMusicApi)（926 star，2026-09-02 有推送）与 [Rain120/qq-music-api](https://github.com/Rain120/qq-music-api)（1067 star，2026-09-04 有推送）都在活跃维护，且实现了酷狗的签名取址、三家的扫码登录。自写适配器已跑通可作兜底，等台里决定。
 - [ ] 服务器信息：系统、部署路径、域名待定，DEPLOY.md 里现在是占位值
 - [ ] 网易云会员 Cookie：待 S7 完成后由管理员在后台扫码登录写入，不经聊天传递
+- [ ] 酷狗设备标识：`server/.env` 里那四项现在是每次启动临时生成，上生产前固定下来
 - [ ] 台标 / 校徽：暂无，先用文字标识「杨一之声」，拿到素材再替换
 - [ ] 法定假日数据：S7 先做手工标记，后续可考虑接节假日数据源
 
 ## 变更记录
+
+- 2026-09-05 酷狗取址改走上游 [MakcRe/KuGouMusicApi](https://github.com/MakcRe/KuGouMusicApi)：作为 git 依赖装进 server，用 `npm run kugou-api --workspace server` 起在 3300，`npm run dev` 会一起拉起来。取址失败自动回落自写直连并静默一分钟。理由是它带请求签名和 `/login/qr/*`，台里将来开会员就能直接出高音质。
+  - 上游的 `/search` 对匿名请求一律 `error_code 152`（模块直调和起独立服务都试过），所以搜索仍用自写实现，混搭的原因写进了 CONTEXT.md 第 3 节。
+  - QQ 没换上游：Rain120/qq-music-api 没有扫码登录、Cookie 要写进它自己的配置文件、不在 npm 上且启动依赖 ts-node，换过去只多一个进程不多一份能力。
+  - 新增 `README.md` 写清本地怎么跑；`smoke:sources` 实测基线也记在那里。
 
 - 2026-09-04 部署方案换成台里自有服务器，数据库从 Neon Postgres 换成 SQLite（`@prisma/adapter-better-sqlite3`）。理由：自托管有持久磁盘，当初选 Postgres 就是为了绕开 Render 免费档磁盘不持久，这个约束消失了；一天几十到几百条写入用单文件足够，备份就是拷一个文件，不用 Docker 也不用数据库服务器。
   - 代价与处理：Prisma 的 SQLite 连接器不支持原生 enum、数组和 Json，于是 5 组取值改存字符串并把唯一来源收进 `server/src/lib/domain.ts`（联合类型 + `is*` 校验 + 标签），`flaggedWords` 与 `AuditLog.detail` 改存 JSON 字符串，日期改存 `YYYY-MM-DD` 字符串。趁迁移一次都还没跑过时改，成本最低。

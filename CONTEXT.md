@@ -41,7 +41,11 @@
 | --- | --- | --- |
 | 网易云音乐 | `NeteaseCloudMusicApi` npm 包（2026-05 仍在发布），封装了加密协议和扫码登录 | 免费歌能到 320k；付费歌只有约 35 秒试听片段 |
 | QQ 音乐 | 自写适配器，走 `u.y.qq.com/cgi-bin/musicu.fcg` 的 POST 协议 | 免费歌 128k（M500）或 m4a（C400）；付费歌只有 RS02 试听片段 |
-| 酷狗音乐 | 自写适配器：`songsearch.kugou.com` 搜索 + `m.kugou.com/app/i/getSongInfo.php` 取址 | Privilege 0/8 的歌能到 128k 完整曲；Privilege 10 一个地址都没有 |
+| 酷狗音乐 | 搜索走自写适配器（`songsearch.kugou.com`）；取址走上游 `kugoumusicapi` sidecar，连不上时回落到 `m.kugou.com/app/i/getSongInfo.php` | 免费歌 128k 完整曲；Privilege 10 的付费歌一个地址都没有 |
+
+酷狗为什么是「自写搜索 + 上游取址」这种混搭（2026-09-05 实测）：上游 [MakcRe/KuGouMusicApi](https://github.com/MakcRe/KuGouMusicApi)（926 star，仍在更新）已作为 git 依赖装进 server，用 `npm run kugou-api --workspace server` 起在 3300 端口。它的 `/song/url` 带请求签名，配上会员 Cookie 能出 320k 与无损，还带 `/login/qr/*` 扫码登录，所以取址和将来拿 Cookie 都交给它。但它的 `/search` 对匿名请求一律返回 `error_code 152 Parameter Error`（模块直调和起服务两种方式都试过），所以搜索仍用自写实现。取址失败会静默回落直连，并在一分钟内不再重试上游，避免每次都白等一次超时。
+
+QQ 为什么没换成上游：[Rain120/qq-music-api](https://github.com/Rain120/qq-music-api)（1067 star，2026-09-04 还在推）没有扫码登录，Cookie 要手写进它的 `config/user-info.js`，和「后台配置、加密存库」的设计冲突；它也不在 npm 上，启动依赖 ts-node，得先 clone 再装。自写适配器已经覆盖搜索、取址、歌词，换过去只增加进程数，不增加能力。等它哪天失效再换。
 
 踩过的坑，换实现前先看这几条：
 

@@ -6,12 +6,14 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",
+    "kugou-api": "node scripts/start-kugou-api.mjs",
     "build": "prisma generate && tsc -p tsconfig.json",
     "start": "prisma migrate deploy && node dist/server.js",
     "typecheck": "tsc -p tsconfig.typecheck.json",
     "test": "vitest run",
     "generate": "prisma generate",
     "migrate": "prisma migrate dev",
+    "migrate:deploy": "prisma migrate deploy",
     "seed": "prisma db seed",
     "smoke:sources": "tsx scripts/smoke-sources.ts",
     "studio": "prisma studio"
@@ -26,6 +28,7 @@
     "better-sqlite3": "13.0.3",
     "dotenv": "17.4.2",
     "fastify": "5.12.1",
+    "kugoumusicapi": "github:MakcRe/KuGouMusicApi",
     "NeteaseCloudMusicApi": "4.32.0"
   },
   "devDependencies": {
