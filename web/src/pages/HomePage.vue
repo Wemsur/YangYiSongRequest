@@ -146,7 +146,7 @@ const pageCount = computed(() => Math.max(1, Math.ceil(currentTab.value.total / 
       <input
         v-model="keyword"
         type="search"
-        placeholder="歌名、歌手，随便打一个"
+        placeholder="搜索歌名、歌手"
         class="min-w-0 grow rounded-control border border-rule bg-paper-hi px-4 py-3 text-base placeholder:text-ink-faint"
         aria-label="搜索歌曲"
       />
