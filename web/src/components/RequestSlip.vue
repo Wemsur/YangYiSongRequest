@@ -99,7 +99,10 @@ async function copyCode(): Promise<void> {
           <button type="button" class="rounded-control border border-rule px-3 py-2 text-sm" @click="copyCode">
             复制
           </button>
-          <RouterLink to="/lookup" class="rounded-control border border-rule px-3 py-2 text-sm">
+          <RouterLink
+            to="/lookup"
+            class="pressable rounded-control border border-rule px-3 py-2 text-sm"
+          >
             去查询页
           </RouterLink>
           <button type="button" class="btn-primary ml-auto px-4 py-2 text-sm" @click="emit('close')">

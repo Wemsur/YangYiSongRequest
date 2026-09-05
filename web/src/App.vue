@@ -39,7 +39,7 @@ const onAir = computed(() => activeSlot(site.slots, hhmm(clock.serverNow)) !== n
         <div class="flex shrink-0 items-center gap-3">
           <RouterLink
             to="/lookup"
-            class="rounded-badge border border-rule px-2.5 py-1.5 text-sm text-ink-soft"
+            class="pressable rounded-badge border border-rule px-2.5 py-1.5 text-sm text-ink-soft"
           >
             查询
           </RouterLink>

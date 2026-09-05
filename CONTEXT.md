@@ -97,7 +97,7 @@ QQ 为什么没换成上游：[Rain120/qq-music-api](https://github.com/Rain120/
 - 圆角：卡片 12px，按钮与输入 10px，徽章 8px。不用胶囊形全圆角。
 - 纹理：极轻纸纹噪点（opacity ≤ 0.05）与半调网点分区底，用 CSS/SVG 生成，禁止大图。
 - 唯一的强装饰：点歌确认弹窗做成一张油印点歌条（撕边、套印偏移、编号章），提交成功时查询码以盖章动效出现。其余页面保持安静。
-- 动效只有三处：盖章、ON AIR 呼吸灯、试听时的 VU 条。无视差滚动，无整屏 reveal。全部尊重 `prefers-reduced-motion`。
+- 动效只有几处：盖章、ON AIR 呼吸灯、试听时的 VU 条、播出单卡片的跟手切换，以及所有按钮按下时缩到 0.96 的点击反馈。按钮那条写在 `app.css` 的 `@layer base` 里，用独立的 `scale` 属性而不是 `transform`，免得覆盖元素已有的 `translate`；长得像按钮的链接加 `.pressable` 就有同样反馈。无视差滚动，无整屏 reveal。全部尊重 `prefers-reduced-motion`。
 - 播出序号是真实信息，可以显式编号；不做纯装饰性的 01 / 02 / 03。
 
 ### 布局

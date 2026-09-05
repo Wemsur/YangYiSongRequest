@@ -98,6 +98,22 @@
     letter-spacing: -0.01em;
   }
 
+  /* 点击反馈：按下时整个控件微微缩小。
+     用独立的 scale 属性而不是 transform，这样不会覆盖元素已有的 translate
+     （播出单两侧的翻页按钮就是靠 translate 做垂直居中的）。
+     长得像按钮的链接加 .pressable 就能有同样的反馈。 */
+  button,
+  [role='button'],
+  .pressable {
+    transition: scale 120ms ease-out;
+  }
+
+  button:not(:disabled):active,
+  [role='button']:active,
+  .pressable:active {
+    scale: 0.96;
+  }
+
   ::selection {
     background-color: var(--color-orange);
     color: #fff8ec;
