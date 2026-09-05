@@ -4,6 +4,7 @@ import AdminNav from '@/components/AdminNav.vue'
 import { ApiError, SOURCES } from '@/lib/api'
 import type { SourceId } from '@/lib/api'
 import { readDay, reorderSlot, unscheduleRequest } from '@/lib/adminApi'
+import { dayCsvUrl, dayZipUrl, songDownloadUrl } from '@/lib/adminApi'
 import type { AdminDaySlot } from '@/lib/adminApi'
 import { duration } from '@/lib/slots'
 import { isoDate } from '@/lib/time'
@@ -75,6 +76,23 @@ function onDrop(slotId: string, index: number): void {
   if (!from || from.slotId !== slotId) return
   void move(slotId, from.index, index)
 }
+
+/** 给主播的稿子，直接进剪贴板 */
+async function copyRunSheet(): Promise<void> {
+  const lines = [`${date.value} 播出单`, '']
+  for (const slot of slots.value) {
+    if (slot.songs.length === 0) continue
+    lines.push(`【${slot.slotName} ${slot.startTime}–${slot.endTime}】`)
+    slot.songs.forEach((song, index) => {
+      lines.push(`${String(index + 1).padStart(2, '0')}. ${song.title} — ${song.artist}`)
+    })
+    lines.push('')
+  }
+  await navigator.clipboard?.writeText(lines.join('\n').trim()).catch(() => undefined)
+  notice.value = '播出单文本已复制'
+}
+
+const hasSongs = () => slots.value.some((slot) => slot.songs.length > 0)
 </script>
 
 <template>
@@ -91,6 +109,35 @@ function onDrop(slotId: string, index: number): void {
     </label>
     <p class="text-sm text-ink-soft">
       拖动或用 ↑ ↓ 调顺序，改完立刻生效，前台歌单同步更新。
+    </p>
+  </div>
+
+  <div class="mt-3 flex flex-wrap gap-2">
+    <a
+      class="btn-primary px-3 py-2 text-sm"
+      :class="hasSongs() ? '' : 'pointer-events-none opacity-40'"
+      :href="dayZipUrl(date)"
+    >
+      打包下载整天
+    </a>
+    <a
+      class="rounded-control border border-rule px-3 py-2 text-sm"
+      :class="hasSongs() ? '' : 'pointer-events-none opacity-40'"
+      :href="dayCsvUrl(date)"
+    >
+      导出播出单
+    </a>
+    <button
+      type="button"
+      class="rounded-control border border-rule px-3 py-2 text-sm disabled:opacity-40"
+      :disabled="!hasSongs()"
+      @click="copyRunSheet"
+    >
+      复制播出单文本
+    </button>
+    <p class="w-full text-xs text-ink-soft">
+      打包是边下边压，十来首歌要等十几秒，浏览器会一直显示在下载。付费歌拿不到地址时不会中断，
+      会在压缩包里留一份「缺失清单.txt」。
     </p>
   </div>
 
@@ -111,6 +158,15 @@ function onDrop(slotId: string, index: number): void {
         {{ slot.songs.length }}<span v-if="slot.maxCount"> / {{ slot.maxCount }}</span> 首 ·
         {{ duration(slot.totalMs) }}
       </p>
+    </div>
+
+    <div v-if="slot.songs.length > 0" class="border-t border-rule px-4 py-2">
+      <a
+        class="rounded-control border border-rule px-2.5 py-1.5 text-xs"
+        :href="dayZipUrl(date, slot.slotId)"
+      >
+        只打包这个时段
+      </a>
     </div>
 
     <p v-if="slot.songs.length === 0" class="border-t border-rule px-4 py-4 text-sm text-ink-soft">
@@ -170,6 +226,12 @@ function onDrop(slotId: string, index: number): void {
         >
           {{ player.isCurrent(song.source, song.platformId) && player.playing ? '暂停' : '试听' }}
         </button>
+        <a
+          class="shrink-0 rounded-control border border-rule px-2.5 py-1.5 text-xs"
+          :href="songDownloadUrl(song.id)"
+        >
+          下载
+        </a>
         <button
           type="button"
           class="shrink-0 rounded-control border border-rule px-2.5 py-1.5 text-xs"

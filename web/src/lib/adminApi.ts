@@ -211,3 +211,10 @@ export const patchUser = (
   id: string,
   body: { disabled?: boolean; role?: AdminRole; password?: string },
 ) => apiFetch<{ ok: true }>(`/api/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+
+// 下载类走浏览器直接跳转（cookie 会自动带上），所以这里只给地址不发请求。
+// 文件名由后端的 Content-Disposition 决定，前端不掺和。
+export const songDownloadUrl = (id: string) => `/api/admin/download/song/${id}`
+export const dayZipUrl = (date: string, slotId?: string) =>
+  `/api/admin/download/day/${date}${slotId ? `?slotId=${encodeURIComponent(slotId)}` : ''}`
+export const dayCsvUrl = (date: string) => `/api/admin/export/day/${date}`

@@ -73,9 +73,9 @@ S6 已实现的部分标了「已」，其余是 S7 / S8 的坑位。
 | POST | `/api/admin/schedule/reorder` | 审核员 | 已。body：playDate, slotId, orderedIds（必须是该时段的全部歌） |
 | POST | `/api/admin/requests/manual` | 审核员 | 已。补录歌曲，给了 playDate + slotId 就直接排上 |
 | GET | `/api/admin/audit?page=` | 超管 | 已。操作日志 |
-| GET | `/api/admin/download/song/:id` | 审核员 | S8 单曲下载 |
-| GET | `/api/admin/download/day/:date?slotId=` | 审核员 | S8 流式 zip |
-| GET | `/api/admin/export/day/:date` | 审核员 | S8 播出单 Excel |
+| GET | `/api/admin/download/song/:id` | 审核员 | 单曲下载，实时取流并写入 ID3 与封面 |
+| GET | `/api/admin/download/day/:date?slotId=` | 审核员 | 流式 zip。不给 slotId 就是整天，按时段分子目录 |
+| GET | `/api/admin/export/day/:date` | 审核员 | 播出单 CSV，带 BOM，Excel 能直接打开 |
 | GET / PUT | `/api/admin/config/slots` | 超管 | 已。PUT 整表提交，被排期引用的时段不许删 |
 | GET / PUT | `/api/admin/config/calendar` | 超管 | 已。GET 带 ?month=YYYY-MM；PUT 的 kind 传 null 表示清掉标记 |
 | GET / PUT | `/api/admin/config/grades` | 超管 | 已。body：counts |
@@ -92,4 +92,6 @@ S6 已实现的部分标了「已」，其余是 S7 / S8 的坑位。
 错误响应统一 `{ error: { code, message } }`。401 未登录，403 权限不足，429 触发限流。
 
 排期的校验顺序：日期格式 → 不能排到过去 → 不超过 `maxScheduleDays` → 行政历标记（`SCHOOL` 才行，没标记的工作日按可播）→ 周末拦截 → 时段存在且启用。容量超了只在响应里带 `capacity.message` 提示，不拒绝请求。
+
+下载类接口的三点约定：文件名走 `Content-Disposition` 的 `filename*=UTF-8''`，纯 `filename` 里的中文会被浏览器存成乱码；zip 用 store 不压缩，音频本身已是压缩格式，再压没收益只费时间；单曲取不到地址时整包不失败，改为在压缩包里放一份「缺失清单.txt」，附上失败原因。
 

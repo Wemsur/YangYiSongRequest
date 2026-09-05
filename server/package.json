@@ -27,13 +27,16 @@
     "@node-rs/argon2": "2.2.0",
     "@prisma/adapter-better-sqlite3": "7.10.0",
     "@prisma/client": "7.10.0",
+    "archiver": "8.0.0",
     "better-sqlite3": "13.0.3",
     "dotenv": "17.4.2",
     "fastify": "5.12.1",
     "kugoumusicapi": "github:MakcRe/KuGouMusicApi",
-    "NeteaseCloudMusicApi": "4.32.0"
+    "NeteaseCloudMusicApi": "4.32.0",
+    "node-id3": "0.2.9"
   },
   "devDependencies": {
+    "@types/archiver": "8.0.0",
     "@types/node": "26.4.0",
     "prisma": "7.10.0",
     "tsx": "4.23.13",
