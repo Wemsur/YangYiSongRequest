@@ -5,13 +5,18 @@ import Wordmark from '@/components/Wordmark.vue'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 import OnAirLamp from '@/components/OnAirLamp.vue'
 import { useServerClock } from '@/stores/clock'
-import { activeSlot, FALLBACK_SLOTS } from '@/lib/slots'
+import { useSite } from '@/stores/site'
+import { activeSlot } from '@/lib/slots'
 import { hhmm } from '@/lib/time'
 
 const clock = useServerClock()
-onMounted(() => clock.start())
+const site = useSite()
+onMounted(() => {
+  clock.start()
+  void site.load()
+})
 
-const onAir = computed(() => activeSlot(FALLBACK_SLOTS, hhmm(clock.serverNow)) !== null)
+const onAir = computed(() => activeSlot(site.slots, hhmm(clock.serverNow)) !== null)
 </script>
 
 <template>
@@ -32,6 +37,12 @@ const onAir = computed(() => activeSlot(FALLBACK_SLOTS, hhmm(clock.serverNow)) !
           </span>
         </RouterLink>
         <div class="flex shrink-0 items-center gap-3">
+          <RouterLink
+            to="/lookup"
+            class="rounded-badge border border-rule px-2.5 py-1.5 text-sm text-ink-soft"
+          >
+            查询
+          </RouterLink>
           <OnAirLamp :on="onAir" />
           <ThemeToggle />
         </div>

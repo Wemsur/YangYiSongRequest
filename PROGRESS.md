@@ -2,7 +2,7 @@
 
 > 每完成一步就更新这里。新会话靠它判断做到哪了。
 
-当前阶段：**S1–S3 完成，数据库已建好并灌入种子，可以进 S4**
+当前阶段：**S4 完成，前台已经能搜索、试听、点歌、凭码查询，下一步 S5 歌单**
 
 ## 阶段计划
 
@@ -12,7 +12,7 @@
 | S1 | 项目骨架：monorepo、TS 配置、Fastify 起服务、Vite 起前端、Tailwind token 落地 | ✅ 完成 2026-08-31 |
 | S2 | 数据模型：Prisma schema + 首次迁移 + 种子数据（超管、时段、班数） | ✅ 完成 2026-09-04 |
 | S3 | 音源适配层：三家 search/detail/streamUrl/downloadUrl/lyric + Vitest + 可用性自检 | ✅ 完成 2026-09-04 |
-| S4 | 前台：搜索 tab、试听代理、点歌弹窗与提交、查询码查询 | ⬜ |
+| S4 | 前台：搜索 tab、试听代理、点歌弹窗与提交、查询码查询 | ✅ 完成 2026-09-05 |
 | S5 | 前台：最近歌单与过往歌单 | ⬜ |
 | S6 | 后台：登录鉴权、分权、审核排期、拖拽调序、AuditLog | ⬜ |
 | S7 | 后台：配置页（时段、行政历、班数、敏感词、音源扫码登录、账号） | ⬜ |
@@ -28,6 +28,14 @@
 - [ ] 法定假日数据：S7 先做手工标记，后续可考虑接节假日数据源
 
 ## 变更记录
+
+- 2026-09-05 S4 前台四件事接通：三音源 tab 并行搜索、后端试听代理（转发 Range，浏览器实测拿到 206）、油印点歌条弹窗与盖章出码、`/lookup` 凭码查状态。
+  - 后端新增 `routes/public.ts` 七个接口、`services/{site,requests,banned-words}.ts`、`lib/{time,errors}.ts`；错误统一收敛成 `{ error: { code, message } }`，Fastify 自己抛的 4xx 照原状态码回，不再一律算 500。
+  - 提交时歌曲信息以音源返回的为准，不采信前端传的字段；限流按东八区当天计数（同 IP 10 次、同一身份 2 首），身份填写关闭时后者自动失效。
+  - 查询码取 6 位，字母表去掉了 0 O 1 I L；碰撞就换一个重试。查询结果刻意不含任何点歌人信息。
+  - 前端新增 `stores/{site,player}.ts`、`components/{SongRow,RequestSlip}.vue`、`pages/LookupPage.vue`；全站共用一个 audio 元素保证同时只放一首。
+  - 时区约定修正：东八区偏移恒定，没引 date-fns-tz，服务端走 `lib/time.ts`，已改写进 CONTEXT.md 第 6 节。
+  - 新增 27 个单测（含时区换算与压平字段编解码）。浏览器里实测走通了搜索 → 试听 → 点歌 → 盖章出码 → 凭码查询整条链。
 
 - 2026-09-05 酷狗取址改走上游 [MakcRe/KuGouMusicApi](https://github.com/MakcRe/KuGouMusicApi)：作为 git 依赖装进 server，用 `npm run kugou-api --workspace server` 起在 3300，`npm run dev` 会一起拉起来。取址失败自动回落自写直连并静默一分钟。理由是它带请求签名和 `/login/qr/*`，台里将来开会员就能直接出高音质。
   - 上游的 `/search` 对匿名请求一律 `error_code 152`（模块直调和起独立服务都试过），所以搜索仍用自写实现，混搭的原因写进了 CONTEXT.md 第 3 节。

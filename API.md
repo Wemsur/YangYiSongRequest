@@ -35,20 +35,24 @@ Prisma 7 的两处约定：`datasource` 块里不再写 `url`，迁移用的数�
 
 ## 前台接口
 
+已实现（S4）。歌单相关的三个接口在 S5 补。
+
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `/api/search?q=&source=&page=` | 单音源搜索。前端对三个 tab 各发一次，互不阻塞 |
-| GET | `/api/song/:source/:platformId` | 歌曲详情（时长、封面、可用音质） |
-| GET | `/api/stream/:source/:platformId` | 试听代理，支持 Range，返回 `audio/*` |
-| GET | `/api/lyric/:source/:platformId` | 歌词 |
+| GET | `/api/site` | 站点状态：点歌开关、身份填写开关、公告、时段列表、各年级班数 |
+| GET | `/api/search?source=&q=&page=` | 单音源搜索。每页固定 20 条，page 上限 20。前端对三个 tab 各发一次，互不阻塞 |
+| GET | `/api/song/:source/:platformId` | 歌曲详情，字段同搜索结果的单条 |
+| GET | `/api/stream/:source/:platformId` | 试听代理，转发 Range 与防盗链请求头，返回 200 或 206 |
+| GET | `/api/lyric/:source/:platformId` | 返回 `{ lyric: string \| null }` |
 | POST | `/api/requests` | 提交点歌，body：source, platformId, grade?, classNo?, requesterName? |
-| GET | `/api/requests/:queryCode` | 凭查询码查状态，不返回提交人信息 |
-| GET | `/api/playlist/recent` | 最近歌单：昨天 + 今天 + 未来已排期 |
-| GET | `/api/playlist/months` | 有歌单的月份列表 |
-| GET | `/api/playlist/date/:date` | 指定日期歌单 |
-| GET | `/api/site` | 站点状态：点歌开关、身份填写开关、公告、时段配置、年级班数 |
+| GET | `/api/requests/:code` | 凭查询码查状态，不返回任何提交人信息 |
+| GET | `/api/playlist/recent` | S5：最近歌单（昨天 + 今天 + 未来已排期） |
+| GET | `/api/playlist/months` | S5：有歌单的月份列表 |
+| GET | `/api/playlist/date/:date` | S5：指定日期歌单 |
 
-`POST /api/requests` 成功返回 `{ queryCode }`。触发限流返回 429 并带 `reason`，说明是 IP 维度还是姓名维度。身份三项在「要求填写身份」开启时必填、关闭时必须缺省；不匹配返回 400。
+`POST /api/requests` 成功返回 201 与 `{ queryCode }`。身份三项在「要求填写身份」开启时必填、关闭时必须缺省，不匹配返回 400。歌曲信息一律以音源返回的为准，不采信前端传的时长与标题。
+
+限流：全局 240 次/分钟；`/api/stream` 120 次/分钟；`POST /api/requests` 20 次/10 分钟，之上还有按天的库内计数（同 IP 10 次、同一身份 2 首）。触发返回 429，`code` 为 `RATE_LIMIT_IP` 或 `RATE_LIMIT_IDENTITY`。
 
 ## 管理接口
 

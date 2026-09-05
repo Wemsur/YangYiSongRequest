@@ -141,7 +141,8 @@ YangYiSongRequest/
 
 ## 6. 关键约定
 
-- 时区：库内存 UTC，展示与排期一律 Asia/Shanghai，统一用 date-fns-tz，不依赖服务器本地时区。
+- 时区：库内存 UTC，展示与排期一律 Asia/Shanghai。东八区没有夏令时、偏移恒定 +08:00，所以没引 date-fns-tz，服务端统一走 `server/src/lib/time.ts`，前端走 `web/src/lib/time.ts` 的 `Intl` 格式化，两边都不看服务器和浏览器的本地时区。
+- 前端所有请求都走 `web/src/lib/api.ts`，后端错误统一是 `{ error: { code, message } }`，`message` 可以直接显示给学生；接口层把它包成 `ApiError`，组件只管展示 `error.message`。
 - 点歌人信息（年级 + 班级 + 姓名）仅管理员可见，前台歌单与查询码结果页都不展示。
 - 前台永不暴露平台真实音频直链，试听与下载都经后端代理。
 - 提交点歌后返回 6 位查询码，是学生查询自己那条记录的唯一凭据。

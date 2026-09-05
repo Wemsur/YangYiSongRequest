@@ -1,9 +1,13 @@
 import { existsSync } from 'node:fs'
 import Fastify from 'fastify'
+import type { FastifyError } from 'fastify'
 import cookie from '@fastify/cookie'
 import rateLimit from '@fastify/rate-limit'
 import fastifyStatic from '@fastify/static'
 import { config } from './config.js'
+import { AppError } from './lib/errors.js'
+import { publicRoutes } from './routes/public.js'
+import { SourceError } from './sources/types.js'
 
 export async function buildApp() {
   const app = Fastify({
@@ -27,6 +31,38 @@ export async function buildApp() {
     version: config.version,
     serverTime: new Date().toISOString(),
   }))
+
+  // 错误一律收敛成 { error: { code, message } }，message 是给学生看的中文
+  app.setErrorHandler((error: FastifyError, request, reply) => {
+    if (error instanceof AppError) {
+      return reply.code(error.statusCode).send({ error: { code: error.code, message: error.message } })
+    }
+    if (error instanceof SourceError) {
+      request.log.warn({ err: error, source: error.source }, '音源请求失败')
+      return reply
+        .code(502)
+        .send({ error: { code: 'SOURCE_UNAVAILABLE', message: `音源暂时不可用：${error.message}` } })
+    }
+    if (error.statusCode === 429) {
+      return reply
+        .code(429)
+        .send({ error: { code: 'TOO_MANY_REQUESTS', message: '操作太频繁了，歇一会儿再试' } })
+    }
+    if ('validation' in error && error.validation) {
+      return reply.code(400).send({ error: { code: 'BAD_REQUEST', message: '请求参数不对' } })
+    }
+    // Fastify 自己抛的 4xx（请求体坏了、Content-Length 不符之类）照原状态码回，别一律算成 500
+    if (error.statusCode && error.statusCode >= 400 && error.statusCode < 500) {
+      request.log.warn({ err: error }, '客户端请求有问题')
+      return reply
+        .code(error.statusCode)
+        .send({ error: { code: error.code ?? 'BAD_REQUEST', message: '请求不合法' } })
+    }
+    request.log.error({ err: error }, '未预期的错误')
+    return reply.code(500).send({ error: { code: 'INTERNAL', message: '服务器出了点问题' } })
+  })
+
+  await app.register(publicRoutes)
 
   const hasWebDist = existsSync(config.webDist)
   if (hasWebDist) {

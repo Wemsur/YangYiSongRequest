@@ -71,4 +71,4 @@ npm run studio --workspace server     # Prisma Studio，浏览器里看库
 
 ## 目前做到哪
 
-S1 骨架、S2 数据模型、S3 音源适配层已完成。前台页面、管理后台、下载打包尚未开始，进度看 [PROGRESS.md](PROGRESS.md)。
+S1 骨架、S2 数据模型、S3 音源适配层、S4 前台点歌都已完成：首页能搜三家音源、试听、点歌出查询码，`/lookup` 能凭码查审核结果。歌单页、管理后台、下载打包尚未开始，进度看 [PROGRESS.md](PROGRESS.md)。
