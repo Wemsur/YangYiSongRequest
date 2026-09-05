@@ -1,5 +1,5 @@
 // 用霞鹜文楷把站点标识渲染成内联 SVG 路径。
-// 文楷按 unicode-range 切成 582 个分片，最小粒度也有约 50KB/片，光是「杨一之声」四个字
+// 文楷按 unicode-range 切成 582 个分片，最小粒度也有约 50KB/片，光是「杨中之声」四个字
 // 就要拉 6 个分片、几百 KB。标识文案是固定的，所以在构建期取字形路径，运行时零字体开销。
 // 改标识文案后重跑：npm run wordmark --workspace web
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
@@ -15,7 +15,7 @@ const outDir = path.join(webRoot, 'src', 'assets')
 const FONT_SIZE = 100
 
 const TARGETS = [
-  { file: 'wordmark-mark.svg', text: '杨一之声', weight: 'bold', tracking: 0.04 },
+  { file: 'wordmark-mark.svg', text: '杨中之声', weight: 'bold', tracking: 0.04 },
   { file: 'wordmark-full.svg', text: '杨村一中校园广播电视台', weight: 'regular', tracking: 0.08 },
 ]
 
