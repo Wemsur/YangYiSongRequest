@@ -5,12 +5,12 @@ WORKDIR /app
 RUN apk add --no-cache python3 make g++ git
 COPY package.json package-lock.json ./
 COPY server/package.json ./server/
+COPY web/package.json ./web/
 RUN npm ci
 
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/server/node_modules ./server/node_modules
 COPY . .
 # 构建前端 + 后端（Prisma generate 在 server build 中执行）
 RUN npm run build
@@ -18,9 +18,8 @@ RUN npm run build
 FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
-# 仅复制生产依赖
+# 仅复制生产依赖（npm workspaces 已提升到根 node_modules）
 COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/server/node_modules ./server/node_modules
 # 复制构建产物
 COPY --from=builder /app/web/dist ./web/dist
 COPY --from=builder /app/server/dist ./server/dist
