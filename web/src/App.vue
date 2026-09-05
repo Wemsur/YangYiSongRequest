@@ -43,7 +43,7 @@ const onAir = computed(() => activeSlot(site.slots, hhmm(clock.serverNow)) !== n
           >
             查询
           </RouterLink>
-          <OnAirLamp :on="onAir" />
+<!--          <OnAirLamp :on="onAir" />-->
           <ThemeToggle />
         </div>
       </div>

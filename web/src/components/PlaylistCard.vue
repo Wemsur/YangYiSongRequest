@@ -39,7 +39,7 @@ const sourceLabel = (id: SourceId) => SOURCES.find((item) => item.id === id)?.la
       <div class="tick-rule" />
     </div>
 
-    <ul>
+    <ul v-if="slots.length">
       <li
         v-for="slot in slots"
         :key="slot.slotId"
@@ -96,5 +96,6 @@ const sourceLabel = (id: SourceId) => SOURCES.find((item) => item.id === id)?.la
         </ol>
       </li>
     </ul>
+    <p v-else class="border-t border-rule px-5 py-6 text-sm text-ink-soft">这天没有排歌。</p>
   </section>
 </template>

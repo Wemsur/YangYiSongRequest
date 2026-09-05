@@ -38,6 +38,26 @@ export function isWeekendDate(date: string): boolean {
   return day === 0 || day === 6
 }
 
+/** 在 YYYY-MM-DD 上加减天数，仍返回 YYYY-MM-DD。按 UTC 算，理由同 isWeekendDate */
+export function shiftDate(date: string, days: number): string {
+  const cursor = new Date(`${date}T00:00:00.000Z`)
+  cursor.setUTCDate(cursor.getUTCDate() + days)
+  return cursor.toISOString().slice(0, 10)
+}
+
+/** 相对今天的口语说法，播出单卡片的标签用它 */
+export function relativeDayLabel(date: string, today: string): string {
+  const diff = Math.round(
+    (Date.parse(`${date}T00:00:00.000Z`) - Date.parse(`${today}T00:00:00.000Z`)) / 86_400_000,
+  )
+  if (diff === -1) return '昨天'
+  if (diff === 0) return '今天'
+  if (diff === 1) return '明天'
+  if (diff === 2) return '后天'
+  const [, month, day] = date.split('-')
+  return `${Number(month)}月${Number(day)}日`
+}
+
 /** 从今天起找下一个非周末的日期，管理端排期的默认值 */
 export function nextWeekday(from: Date = new Date()): string {
   const cursor = new Date(from)

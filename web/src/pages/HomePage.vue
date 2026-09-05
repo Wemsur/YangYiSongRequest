@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { RouterLink } from 'vue-router'
-import PlaylistCard from '@/components/PlaylistCard.vue'
+import PlaylistDeck from '@/components/PlaylistDeck.vue'
+import type { DeckDay } from '@/components/PlaylistDeck.vue'
 import RequestSlip from '@/components/RequestSlip.vue'
 import SongRow from '@/components/SongRow.vue'
 import { ApiError, SOURCES, fetchRecentPlaylist, searchSongs } from '@/lib/api'
 import type { PlaylistDay, PlaylistSlot, Song, SourceId } from '@/lib/api'
 import { activeSlot } from '@/lib/slots'
-import { hhmm, isoDate } from '@/lib/time'
+import { hhmm, isoDate, relativeDayLabel, shiftDate } from '@/lib/time'
 import { useServerClock } from '@/stores/clock'
 import { usePlayer } from '@/stores/player'
 import { useSite } from '@/stores/site'
@@ -43,9 +44,9 @@ const activeSlotId = computed(() => activeSlot(site.slots, now.value)?.id ?? nul
 const currentTab = computed(() => tabs[active.value])
 const searched = computed(() => submitted.value !== '')
 
-/** 今天的播出单：时段按后台配置铺满，有歌的填进去，没歌的显示还没排 */
-const todaySlots = computed<PlaylistSlot[]>(() => {
-  const scheduled = recent.value.find((day) => day.date === today.value)?.slots ?? []
+/** 今天与往后的卡片按后台配置铺满时段，有歌的填进去；过去的日期只显示真有歌的时段 */
+function fillSlots(date: string, scheduled: PlaylistSlot[]): PlaylistSlot[] {
+  if (date < today.value) return scheduled
   return site.slots.map(
     (slot) =>
       scheduled.find((item) => item.slotId === slot.id) ?? {
@@ -57,18 +58,28 @@ const todaySlots = computed<PlaylistSlot[]>(() => {
         songs: [],
       },
   )
+}
+
+/** 卡片堆：昨天 + 今天 + 往后所有已排期的日期，默认停在今天 */
+const deckDays = computed<DeckDay[]>(() => {
+  const yesterday = shiftDate(today.value, -1)
+  const dates = new Set<string>([yesterday, today.value])
+  for (const day of recent.value) {
+    if (day.date >= yesterday) dates.add(day.date)
+  }
+  return [...dates]
+    .sort()
+    .map((date) => ({
+      date,
+      relative: relativeDayLabel(date, today.value),
+      slots: fillSlots(date, recent.value.find((day) => day.date === date)?.slots ?? []),
+    }))
 })
 
-const otherDays = computed(() => recent.value.filter((day) => day.date !== today.value))
-
-function relativeLabel(date: string): string {
-  const diff = Math.round(
-    (Date.parse(`${date}T00:00:00+08:00`) - Date.parse(`${today.value}T00:00:00+08:00`)) / 86_400_000,
-  )
-  if (diff === -1) return '昨天'
-  if (diff === 1) return '明天'
-  return diff > 1 ? `${diff} 天后` : '播出单'
-}
+const todayIndex = computed(() => {
+  const found = deckDays.value.findIndex((day) => day.date === today.value)
+  return found >= 0 ? found : 0
+})
 
 onMounted(async () => {
   await site.load()
@@ -112,25 +123,12 @@ const pageCount = computed(() => Math.max(1, Math.ceil(currentTab.value.total / 
     {{ site.announcement }}
   </p>
 
-  <PlaylistCard
-    :date="today"
-    :slots="todaySlots"
-    relative="今天的播出单"
+  <PlaylistDeck
+    :days="deckDays"
+    :start-index="todayIndex"
     :active-slot-id="activeSlotId"
-    emphasis
-  >
-    <template #aside>
-      <p class="mt-0.5 font-mono text-sm tabular-nums text-ink-soft">{{ now }}</p>
-    </template>
-  </PlaylistCard>
-
-  <PlaylistCard
-    v-for="day in otherDays"
-    :key="day.date"
-    class="mt-4"
-    :date="day.date"
-    :slots="day.slots"
-    :relative="relativeLabel(day.date)"
+    :live-date="today"
+    :now-label="now"
   />
 
   <p class="mt-4">
