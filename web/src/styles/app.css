@@ -135,16 +135,21 @@
 
   /* 半调网点底纹 */
   .halftone {
-    background-image: radial-gradient(var(--c-rule) 1px, transparent 1.2px);
+    background-image: radial-gradient(color-mix(in srgb, var(--c-rule) 24%, transparent) 1px, transparent 1.2px);
     background-size: 8px 8px;
   }
 
   /* 小标签：等宽 + 字距，用于「时段」「音源」这类元信息 */
+  /* 小标签：用于「今天的播出单」「搜索」这类区块名。
+     原来用等宽体，但 DM Mono 没有中文字形，中文会掉到系统等宽体上，
+     和正文完全不是一套字，看着像另一个网站。现在统一走正文字体栈，
+     只靠字号、字距和颜色区分层级。等宽体只留给数字和代码。 */
   .eyebrow {
-    font-family: var(--font-mono);
-    font-size: 0.6875rem;
-    line-height: 1;
-    letter-spacing: 0.14em;
+    font-family: var(--font-sans);
+    font-size: 0.75rem;
+    font-variation-settings: 'wght' 560;
+    line-height: 1.2;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--c-ink-soft);
   }
