@@ -7,17 +7,17 @@
 
 放在 `server/.env`，模板见 [server/.env.example](../server/.env.example)。
 
-| 变量 | 说明 |
-| --- | --- |
-| `DATABASE_PROVIDER` | `sqlite`（默认）或 `postgresql` |
-| `DATABASE_URL` | SQLite 文件路径，或 PostgreSQL 连接串 |
-| `SEED_ADMIN_USER` | 初始超管用户名，默认 `yadmin`，只在跑种子时读取 |
-| `SEED_ADMIN_PASSWORD` | 初始密码，留空则随机生成并在终端打印一次 |
-| `PORT` | 监听端口，默认 3000 |
-| `HOST` | 监听地址，默认 `0.0.0.0` |
-| `PUBLIC_BASE_URL` | 站点对外地址，用于生成绝对链接 |
-| `JWT_SECRET` | S6 鉴权启用后必填，随机 32 字节以上 |
-| `CREDENTIAL_KEY` | 音源 Cookie 的加密密钥，任意 ≥32 字符的随机串（内部用 sha256 派生成 32 字节）。没配也能启动，只是后台存不了音源 Cookie。**换掉它等于让已存的 Cookie 全部失效**，需要重新扫码 |
+| 变量                  | 说明                                                                                                                                                                         |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_PROVIDER`   | `sqlite`（默认）或 `postgresql`                                                                                                                                              |
+| `DATABASE_URL`        | SQLite 文件路径，或 PostgreSQL 连接串                                                                                                                                        |
+| `SEED_ADMIN_USER`     | 初始超管用户名，默认 `yadmin`，只在跑种子时读取                                                                                                                              |
+| `SEED_ADMIN_PASSWORD` | 初始密码，留空则随机生成并在终端打印一次                                                                                                                                     |
+| `PORT`                | 监听端口，默认 3000                                                                                                                                                          |
+| `HOST`                | 监听地址，默认 `0.0.0.0`                                                                                                                                                     |
+| `PUBLIC_BASE_URL`     | 站点对外地址，用于生成绝对链接                                                                                                                                               |
+| `JWT_SECRET`          | S6 鉴权启用后必填，随机 32 字节以上                                                                                                                                          |
+| `CREDENTIAL_KEY`      | 音源 Cookie 的加密密钥，任意 ≥32 字符的随机串（内部用 sha256 派生成 32 字节）。没配也能启动，只是后台存不了音源 Cookie。**换掉它等于让已存的 Cookie 全部失效**，需要重新扫码 |
 
 后两个的生成方式：
 
@@ -53,12 +53,12 @@ docker run -d --name yysong \
 ### docker-compose 示例
 
 ```yaml
-version: "3.8"
+version: '3.8'
 services:
   app:
     image: ghcr.io/wemsur/yangyisongrequest:latest
     ports:
-      - "3000:3000"
+      - '3000:3000'
     environment:
       DATABASE_PROVIDER: sqlite
       DATABASE_URL: file:/data/app.db
@@ -68,7 +68,7 @@ services:
       - ./data:/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:3000/api/health']
       interval: 30s
       timeout: 5s
       retries: 3
@@ -227,4 +227,3 @@ systemctl restart yysong
 ## 待补
 
 服务器的系统、部署路径、域名还没定下来，上面的 `/opt/YangYiSongRequest`、`yysong` 用户名都是占位，实际部署时替换并回填本文件。
-

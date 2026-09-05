@@ -11,23 +11,23 @@
 - 使用者：全校学生（点歌，手机为主）+ 广播台管理员（审核排期，桌面为主）
 - 单一目标：把纸质点歌条搬到线上，并让台里当天要播的歌能一键拿到手。
 - 部署目标：台里自有服务器，自托管。原计划的 Render 免费档 + Neon Postgres 已作废（2026-09-04）。
-- 仓库：https://github.com/Wemsur/YangYiSongRequest.git
+- 仓库：<https://github.com/Wemsur/YangYiSongRequest.git>
 
 ## 2. 技术栈（已定，含理由）
 
-| 层 | 选型 | 理由 |
-| --- | --- | --- |
-| 运行时 | Node 20+ + TypeScript | 单语言全栈；三家音源的成熟开源实现以 Node 居多 |
-| 后端框架 | Fastify | 轻量、启动快、流式响应友好（试听代理 / zip 打包） |
-| ORM | Prisma 7 | 迁移可控、类型安全 |
-| 数据库 | SQLite / PostgreSQL | 默认 SQLite 零运维；需要外部数据库或多实例部署时可切换 PostgreSQL |
-| 前端 | Vue 3 + Vite + TypeScript | |
-| 样式 | Tailwind CSS + 自定义 token | 设计系统集中在 token 层，前台与后台共用 |
-| 前台组件 | 自写 | 视觉高度定制，组件库会拖累风格 |
-| 后台组件 | 也自写 | 原计划用 Naive UI，实际做 S6 时发现需要的只有列表、`input[type=date]`、原生 select 和一个上下移动的排序列表，引一整套组件库再改样式反而更费事，还要多背 1MB 依赖。将来做复杂表格时再评估 |
-| 鉴权 | JWT（httpOnly cookie）+ argon2id | |
-| 测试 | Vitest | 重点覆盖音源适配器与排期冲突逻辑 |
-| 部署形态 | 单进程，Fastify 同时提供 API 与前端 dist；推荐 Docker | 少一个要维护的东西；Docker 镜像自动构建并推送到 GHCR，支持多架构 |
+| 层       | 选型                                                  | 理由                                                                                                                                                                                     |
+| -------- | ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 运行时   | Node 20+ + TypeScript                                 | 单语言全栈；三家音源的成熟开源实现以 Node 居多                                                                                                                                           |
+| 后端框架 | Fastify                                               | 轻量、启动快、流式响应友好（试听代理 / zip 打包）                                                                                                                                        |
+| ORM      | Prisma 7                                              | 迁移可控、类型安全                                                                                                                                                                       |
+| 数据库   | SQLite / PostgreSQL                                   | 默认 SQLite 零运维；需要外部数据库或多实例部署时可切换 PostgreSQL                                                                                                                        |
+| 前端     | Vue 3 + Vite + TypeScript                             |                                                                                                                                                                                          |
+| 样式     | Tailwind CSS + 自定义 token                           | 设计系统集中在 token 层，前台与后台共用                                                                                                                                                  |
+| 前台组件 | 自写                                                  | 视觉高度定制，组件库会拖累风格                                                                                                                                                           |
+| 后台组件 | 也自写                                                | 原计划用 Naive UI，实际做 S6 时发现需要的只有列表、`input[type=date]`、原生 select 和一个上下移动的排序列表，引一整套组件库再改样式反而更费事，还要多背 1MB 依赖。将来做复杂表格时再评估 |
+| 鉴权     | JWT（httpOnly cookie）+ argon2id                      |                                                                                                                                                                                          |
+| 测试     | Vitest                                                | 重点覆盖音源适配器与排期冲突逻辑                                                                                                                                                         |
+| 部署形态 | 单进程，Fastify 同时提供 API 与前端 dist；推荐 Docker | 少一个要维护的东西；Docker 镜像自动构建并推送到 GHCR，支持多架构                                                                                                                         |
 
 默认 SQLite 不需要数据库服务器；PostgreSQL 模式连接已有实例。若采纳上游音源项目做 sidecar，那两个服务用 Docker 起最省事，届时再定。
 
@@ -37,11 +37,11 @@
 
 选定实现与实测结论（2026-09-04 用 `npm run smoke:sources --workspace server` 跑通）：
 
-| 音源 | 实现方式 | 无会员时能拿到什么 |
-| --- | --- | --- |
-| 网易云音乐 | `NeteaseCloudMusicApi` npm 包（2026-05 仍在发布），封装了加密协议和扫码登录 | 免费歌能到 320k；付费歌只有约 35 秒试听片段 |
-| QQ 音乐 | 自写适配器，走 `u.y.qq.com/cgi-bin/musicu.fcg` 的 POST 协议 | 免费歌 128k（M500）或 m4a（C400）；付费歌只有 RS02 试听片段 |
-| 酷狗音乐 | 搜索走自写适配器（`songsearch.kugou.com`）；取址走上游 `kugoumusicapi` sidecar，连不上时回落到 `m.kugou.com/app/i/getSongInfo.php` | 免费歌 128k 完整曲；Privilege 10 的付费歌一个地址都没有 |
+| 音源       | 实现方式                                                                                                                           | 无会员时能拿到什么                                          |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| 网易云音乐 | `NeteaseCloudMusicApi` npm 包（2026-05 仍在发布），封装了加密协议和扫码登录                                                        | 免费歌能到 320k；付费歌只有约 35 秒试听片段                 |
+| QQ 音乐    | 自写适配器，走 `u.y.qq.com/cgi-bin/musicu.fcg` 的 POST 协议                                                                        | 免费歌 128k（M500）或 m4a（C400）；付费歌只有 RS02 试听片段 |
+| 酷狗音乐   | 搜索走自写适配器（`songsearch.kugou.com`）；取址走上游 `kugoumusicapi` sidecar，连不上时回落到 `m.kugou.com/app/i/getSongInfo.php` | 免费歌 128k 完整曲；Privilege 10 的付费歌一个地址都没有     |
 
 酷狗为什么是「自写搜索 + 上游取址」这种混搭（2026-09-05 实测）：上游 [MakcRe/KuGouMusicApi](https://github.com/MakcRe/KuGouMusicApi)（926 star，仍在更新）已作为 git 依赖装进 server，用 `npm run kugou-api --workspace server` 起在 3300 端口。它的 `/song/url` 带请求签名，配上会员 Cookie 能出 320k 与无损，还带 `/login/qr/*` 扫码登录，所以取址和将来拿 Cookie 都交给它。但它的 `/search` 对匿名请求一律返回 `error_code 152 Parameter Error`（模块直调和起服务两种方式都试过），所以搜索仍用自写实现。取址失败会静默回落直连，并在一分钟内不再重试上游，避免每次都白等一次超时。
 
@@ -68,16 +68,16 @@ QQ 为什么没换成上游：[Rain120/qq-music-api](https://github.com/Rain120/
 
 ### 色板
 
-| Token | 值 | 用途 |
-| --- | --- | --- |
-| `paper` | `#F5E9D4` | 页面底色，暖麻纸 |
-| `paper-hi` | `#FFF8EC` | 卡片底、深色按钮上的文字 |
-| `ink` | `#2B1D14` | 正文、深咖主按钮底 |
-| `ink-soft` | `#6B5445` | 次级文字、说明 |
+| Token         | 值        | 用途                             |
+| ------------- | --------- | -------------------------------- |
+| `paper`       | `#F5E9D4` | 页面底色，暖麻纸                 |
+| `paper-hi`    | `#FFF8EC` | 卡片底、深色按钮上的文字         |
+| `ink`         | `#2B1D14` | 正文、深咖主按钮底               |
+| `ink-soft`    | `#6B5445` | 次级文字、说明                   |
 | `riso-orange` | `#FF5B24` | 主强调：CTA 底、当前时段、ON AIR |
-| `riso-yellow` | `#E8A33D` | 次强调：徽章、网点纹理 |
-| `indigo` | `#26356B` | 冷色平衡，仅用于焦点环与链接 |
-| `night` | `#1A120C` | 深色模式底 |
+| `riso-yellow` | `#E8A33D` | 次强调：徽章、网点纹理           |
+| `indigo`      | `#26356B` | 冷色平衡，仅用于焦点环与链接     |
+| `night`       | `#1A120C` | 深色模式底                       |
 
 对比度硬约定：`riso-orange` 对纸底仅约 2.9:1，禁止作正文色，只用于大字号、边框、装饰。主 CTA 是「橙底 + `ink` 文字」（约 5.6:1）。焦点环 2px `indigo`，offset 2px，键盘可见。
 
@@ -108,7 +108,7 @@ QQ 为什么没换成上游：[Rain120/qq-music-api](https://github.com/Rain120/
 
 ## 5. 目录结构（规划）
 
-```
+```text
 YangYiSongRequest/
 ├─ server/
 │  ├─ data/               SQLite 数据库文件，不进版本库

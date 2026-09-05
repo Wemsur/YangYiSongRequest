@@ -1,0 +1,6 @@
+node_modules
+dist
+server/src/generated
+web/dist
+package-lock.json
+*.min.js

@@ -1,26 +1,26 @@
-import { readFileSync } from 'node:fs'
-import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const here = path.dirname(fileURLToPath(import.meta.url))
-const pkg = JSON.parse(
-  readFileSync(path.join(here, '..', 'package.json'), 'utf8'),
-) as { version: string }
+const here = path.dirname(fileURLToPath(import.meta.url));
+const pkg = JSON.parse(readFileSync(path.join(here, '..', 'package.json'), 'utf8')) as {
+  version: string;
+};
 
-const databaseProvider = process.env.DATABASE_PROVIDER ?? 'sqlite'
+const databaseProvider = process.env.DATABASE_PROVIDER ?? 'sqlite';
 if (databaseProvider !== 'sqlite' && databaseProvider !== 'postgresql') {
-  throw new Error('DATABASE_PROVIDER 只能是 sqlite 或 postgresql')
+  throw new Error('DATABASE_PROVIDER 只能是 sqlite 或 postgresql');
 }
 
-const rawDatabaseUrl = process.env.DATABASE_URL ?? 'file:./data/app.db'
+const rawDatabaseUrl = process.env.DATABASE_URL ?? 'file:./data/app.db';
 if (databaseProvider === 'postgresql' && !/^postgres(ql)?:\/\//.test(rawDatabaseUrl)) {
-  throw new Error('使用 PostgreSQL 时必须提供 postgres:// 或 postgresql:// 格式的 DATABASE_URL')
+  throw new Error('使用 PostgreSQL 时必须提供 postgres:// 或 postgresql:// 格式的 DATABASE_URL');
 }
 
 const sqliteFile =
   databaseProvider === 'sqlite'
     ? path.resolve(here, '..', rawDatabaseUrl.replace(/^file:/, ''))
-    : null
+    : null;
 
 /**
  * 跑起服务所必需的几项集中在这里读取和校验，不在业务代码里散着读 process.env。
@@ -49,4 +49,4 @@ export const config = {
    * 置空则只用直连实现；连不上会自动回落，不会让酷狗整源不可用。
    */
   kugouApiUrl: (process.env.KUGOU_API_URL ?? 'http://127.0.0.1:3300').replace(/\/+$/, ''),
-} as const
+} as const;

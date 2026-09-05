@@ -1,5 +1,5 @@
 # 多阶段构建：生产镜像最小化
-FROM node:20-alpine AS deps
+FROM node:24-alpine AS deps
 WORKDIR /app
 # 安装构建原生模块所需的工具（better-sqlite3 / pg）
 RUN apk add --no-cache python3 make g++ git
@@ -8,7 +8,7 @@ COPY server/package.json ./server/
 COPY web/package.json ./web/
 RUN npm ci
 
-FROM node:20-alpine AS builder
+FROM node:24-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
