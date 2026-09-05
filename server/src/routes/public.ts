@@ -6,6 +6,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import { AppError, badRequest, notFound } from '../lib/errors.js'
 import { lookupByCode, submitRequest } from '../services/requests.js'
 import type { SubmitInput } from '../services/requests.js'
+import { listPastMonths, readDate, readRecent } from '../services/playlist.js'
 import { readSite } from '../services/site.js'
 import { UA_DESKTOP } from '../sources/http.js'
 import { getSource } from '../sources/index.js'
@@ -100,4 +101,16 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
   app.get<{ Params: { code: string } }>('/api/requests/:code', async (request) =>
     lookupByCode(request.params.code),
   )
+
+  // 歌单：只露出已排期与已播出的歌，不含任何点歌人信息
+  app.get('/api/playlist/recent', async () => readRecent())
+
+  app.get('/api/playlist/months', async () => listPastMonths())
+
+  app.get<{ Params: { date: string } }>('/api/playlist/date/:date', async (request) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(request.params.date)) {
+      throw badRequest('BAD_DATE', '日期格式不对')
+    }
+    return readDate(request.params.date)
+  })
 }

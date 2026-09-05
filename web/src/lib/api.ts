@@ -74,6 +74,32 @@ export interface LookupResult {
   schedule: { playDate: string; slotName: string; orderNo: number } | null
 }
 
+export interface PlaylistSong {
+  id: string
+  source: SourceId
+  platformId: string
+  title: string
+  artist: string
+  coverUrl: string | null
+  durationMs: number
+  orderNo: number
+  status: RequestStatus
+}
+
+export interface PlaylistSlot {
+  slotId: string
+  slotName: string
+  startTime: string
+  endTime: string
+  totalMs: number
+  songs: PlaylistSong[]
+}
+
+export interface PlaylistDay {
+  date: string
+  slots: PlaylistSlot[]
+}
+
 export class ApiError extends Error {
   constructor(
     readonly code: string,
@@ -85,7 +111,8 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+/** 管理端的请求也复用这套错误处理，见 lib/adminApi.ts */
+export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response
   try {
     response = await fetch(path, {
@@ -119,12 +146,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return data as T
 }
 
-export const fetchServerInfo = () => request<ServerInfo>('/api/version')
+export const fetchServerInfo = () => apiFetch<ServerInfo>('/api/version')
 
-export const fetchSite = () => request<SiteSnapshot>('/api/site')
+export const fetchSite = () => apiFetch<SiteSnapshot>('/api/site')
 
 export const searchSongs = (source: SourceId, keyword: string, page = 1) =>
-  request<SearchPage>(
+  apiFetch<SearchPage>(
     `/api/search?source=${source}&q=${encodeURIComponent(keyword)}&page=${page}`,
   )
 
@@ -137,11 +164,19 @@ export interface SubmitBody {
 }
 
 export const submitRequest = (body: SubmitBody) =>
-  request<{ queryCode: string }>('/api/requests', { method: 'POST', body: JSON.stringify(body) })
+  apiFetch<{ queryCode: string }>('/api/requests', { method: 'POST', body: JSON.stringify(body) })
 
 export const lookupRequest = (code: string) =>
-  request<LookupResult>(`/api/requests/${encodeURIComponent(code.trim().toUpperCase())}`)
+  apiFetch<LookupResult>(`/api/requests/${encodeURIComponent(code.trim().toUpperCase())}`)
 
 /** 试听走后端代理，前台拿不到平台直链 */
 export const streamUrl = (source: SourceId, platformId: string) =>
   `/api/stream/${source}/${encodeURIComponent(platformId)}`
+
+export const fetchRecentPlaylist = () => apiFetch<PlaylistDay[]>('/api/playlist/recent')
+
+export const fetchPlaylistMonths = () =>
+  apiFetch<Array<{ month: string; dates: string[] }>>('/api/playlist/months')
+
+export const fetchPlaylistDate = (date: string) =>
+  apiFetch<PlaylistDay>(`/api/playlist/date/${date}`)

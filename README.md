@@ -69,6 +69,16 @@ npm run studio --workspace server     # Prisma Studio，浏览器里看库
 
 数据库备份就是拷 `server/data/app.db`（连同 `-wal`、`-shm` 一起）。
 
+## 管理后台
+
+浏览器开 `/admin`。本地开发用的超管账号是 `yadmin`，初始密码由种子脚本打印；忘了就重置一个：
+
+```bash
+npm run reset-password --workspace server -- 你的新密码
+```
+
+登录后有两页：审核（筛选、单条与批量排期、驳回、撤下）和排期（按天看各时段，↑ ↓ 或拖拽调顺序）。改完前台歌单立刻同步。
+
 ## 目前做到哪
 
-S1 骨架、S2 数据模型、S3 音源适配层、S4 前台点歌都已完成：首页能搜三家音源、试听、点歌出查询码，`/lookup` 能凭码查审核结果。歌单页、管理后台、下载打包尚未开始，进度看 [PROGRESS.md](PROGRESS.md)。
+S1 骨架、S2 数据模型、S3 音源适配层、S4 前台点歌、S5 歌单、S6 后台审核排期都已完成。后台配置页（时段、行政历、敏感词、音源扫码登录、账号管理）与下载打包尚未开始，进度看 [PROGRESS.md](PROGRESS.md)。

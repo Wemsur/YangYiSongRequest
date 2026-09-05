@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import OnAirLamp from '@/components/OnAirLamp.vue'
+import { RouterLink } from 'vue-router'
+import PlaylistCard from '@/components/PlaylistCard.vue'
 import RequestSlip from '@/components/RequestSlip.vue'
 import SongRow from '@/components/SongRow.vue'
-import { ApiError, SOURCES, searchSongs } from '@/lib/api'
-import type { Song, SourceId } from '@/lib/api'
+import { ApiError, SOURCES, fetchRecentPlaylist, searchSongs } from '@/lib/api'
+import type { PlaylistDay, PlaylistSlot, Song, SourceId } from '@/lib/api'
 import { activeSlot } from '@/lib/slots'
-import { dateLabel, hhmm } from '@/lib/time'
+import { hhmm, isoDate } from '@/lib/time'
 import { useServerClock } from '@/stores/clock'
 import { usePlayer } from '@/stores/player'
 import { useSite } from '@/stores/site'
@@ -27,6 +28,7 @@ const keyword = ref('')
 const submitted = ref('')
 const active = ref<SourceId>('netease')
 const picked = ref<Song | null>(null)
+const recent = ref<PlaylistDay[]>([])
 
 const blank = (): TabState => ({ status: 'idle', songs: [], total: 0, page: 1, message: '' })
 const tabs = reactive<Record<SourceId, TabState>>({
@@ -36,12 +38,42 @@ const tabs = reactive<Record<SourceId, TabState>>({
 })
 
 const now = computed(() => hhmm(clock.serverNow))
-const today = computed(() => dateLabel(clock.serverNow))
-const current = computed(() => activeSlot(site.slots, now.value))
+const today = computed(() => isoDate(clock.serverNow))
+const activeSlotId = computed(() => activeSlot(site.slots, now.value)?.id ?? null)
 const currentTab = computed(() => tabs[active.value])
 const searched = computed(() => submitted.value !== '')
 
-onMounted(() => void site.load())
+/** 今天的播出单：时段按后台配置铺满，有歌的填进去，没歌的显示还没排 */
+const todaySlots = computed<PlaylistSlot[]>(() => {
+  const scheduled = recent.value.find((day) => day.date === today.value)?.slots ?? []
+  return site.slots.map(
+    (slot) =>
+      scheduled.find((item) => item.slotId === slot.id) ?? {
+        slotId: slot.id,
+        slotName: slot.name,
+        startTime: slot.startTime,
+        endTime: slot.endTime,
+        totalMs: 0,
+        songs: [],
+      },
+  )
+})
+
+const otherDays = computed(() => recent.value.filter((day) => day.date !== today.value))
+
+function relativeLabel(date: string): string {
+  const diff = Math.round(
+    (Date.parse(`${date}T00:00:00+08:00`) - Date.parse(`${today.value}T00:00:00+08:00`)) / 86_400_000,
+  )
+  if (diff === -1) return '昨天'
+  if (diff === 1) return '明天'
+  return diff > 1 ? `${diff} 天后` : '播出单'
+}
+
+onMounted(async () => {
+  await site.load()
+  recent.value = await fetchRecentPlaylist().catch(() => [])
+})
 
 /** 三家各发一次、互不阻塞：一家挂了只影响它自己那个 tab */
 async function run(source: SourceId, page: number): Promise<void> {
@@ -80,39 +112,35 @@ const pageCount = computed(() => Math.max(1, Math.ceil(currentTab.value.total / 
     {{ site.announcement }}
   </p>
 
-  <section class="paper-card overflow-hidden">
-    <div class="flex items-start justify-between gap-3 px-5 pt-4">
-      <div>
-        <p class="eyebrow">今天的播出单</p>
-        <h1 class="mt-1.5 text-2xl sm:text-3xl">{{ today }}</h1>
-      </div>
+  <PlaylistCard
+    :date="today"
+    :slots="todaySlots"
+    relative="今天的播出单"
+    :active-slot-id="activeSlotId"
+    emphasis
+  >
+    <template #aside>
       <p class="mt-0.5 font-mono text-sm tabular-nums text-ink-soft">{{ now }}</p>
-    </div>
+    </template>
+  </PlaylistCard>
 
-    <div class="mt-3 px-5">
-      <div class="tick-rule" />
-    </div>
+  <PlaylistCard
+    v-for="day in otherDays"
+    :key="day.date"
+    class="mt-4"
+    :date="day.date"
+    :slots="day.slots"
+    :relative="relativeLabel(day.date)"
+  />
 
-    <ul>
-      <li
-        v-for="slot in site.slots"
-        :key="slot.id"
-        class="border-t border-rule px-5 py-4 first:border-t-0"
-        :class="current?.id === slot.id ? 'bg-orange/10' : ''"
-      >
-        <div class="flex items-center justify-between gap-3">
-          <div class="flex items-baseline gap-3">
-            <span class="font-mono text-sm tabular-nums text-ink-soft">
-              {{ slot.startTime }}–{{ slot.endTime }}
-            </span>
-            <h2 class="text-lg">{{ slot.name }}</h2>
-          </div>
-          <OnAirLamp v-if="current?.id === slot.id" on />
-        </div>
-        <p class="mt-2 text-sm text-ink-soft">还没有排歌</p>
-      </li>
-    </ul>
-  </section>
+  <p class="mt-4">
+    <RouterLink
+      to="/playlist"
+      class="text-sm underline decoration-orange decoration-2 underline-offset-4"
+    >
+      查看过往歌单
+    </RouterLink>
+  </p>
 
   <section class="mt-8">
     <p class="eyebrow">搜索</p>

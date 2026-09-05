@@ -24,7 +24,7 @@
 | 前端 | Vue 3 + Vite + TypeScript | |
 | 样式 | Tailwind CSS + 自定义 token | 设计系统集中在 token 层，前台与后台共用 |
 | 前台组件 | 自写 | 视觉高度定制，组件库会拖累风格 |
-| 后台组件 | Naive UI | 表格、弹窗、日期选择器不自己造 |
+| 后台组件 | 也自写 | 原计划用 Naive UI，实际做 S6 时发现需要的只有列表、`input[type=date]`、原生 select 和一个上下移动的排序列表，引一整套组件库再改样式反而更费事，还要多背 1MB 依赖。将来做复杂表格时再评估 |
 | 鉴权 | JWT（httpOnly cookie）+ argon2id | |
 | 测试 | Vitest | 重点覆盖音源适配器与排期冲突逻辑 |
 | 部署形态 | 单进程，Fastify 同时提供 API 与前端 dist | 少一个要维护的东西 |
@@ -142,7 +142,10 @@ YangYiSongRequest/
 ## 6. 关键约定
 
 - 时区：库内存 UTC，展示与排期一律 Asia/Shanghai。东八区没有夏令时、偏移恒定 +08:00，所以没引 date-fns-tz，服务端统一走 `server/src/lib/time.ts`，前端走 `web/src/lib/time.ts` 的 `Intl` 格式化，两边都不看服务器和浏览器的本地时区。
-- 前端所有请求都走 `web/src/lib/api.ts`，后端错误统一是 `{ error: { code, message } }`，`message` 可以直接显示给学生；接口层把它包成 `ApiError`，组件只管展示 `error.message`。
+- 前端所有请求都走 `web/src/lib/api.ts`（管理端走 `lib/adminApi.ts`，复用同一个 `apiFetch`），后端错误统一是 `{ error: { code, message } }`，`message` 可以直接显示给学生；接口层把它包成 `ApiError`，组件只管展示 `error.message`。
+- 管理端登录态是 httpOnly cookie 里的 JWT，前端不碰 token，只缓存 `/api/admin/me` 的结果。JWT 里只放用户 id，角色和停用状态每次请求都回库核对，所以停用账号立刻失效。
+- 判断 `YYYY-MM-DD` 是星期几，必须按 `T00:00:00.000Z` 解析。写成 `+08:00` 会退到前一天，星期差一位——S6 的排期默认日期就踩过这个坑，前后端各有一份 `isWeekend`。
+- 排期只追加到时段末尾，顺序调整走单独的 reorder 接口，并且在事务里先把 `orderNo` 挪到负数区再落正式值：`(playDate, slotId, orderNo)` 有唯一约束，一步到位会在中途撞上。
 - 点歌人信息（年级 + 班级 + 姓名）仅管理员可见，前台歌单与查询码结果页都不展示。
 - 前台永不暴露平台真实音频直链，试听与下载都经后端代理。
 - 提交点歌后返回 6 位查询码，是学生查询自己那条记录的唯一凭据。

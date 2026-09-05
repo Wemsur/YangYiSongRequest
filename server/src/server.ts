@@ -3,8 +3,12 @@
 import 'dotenv/config'
 import { buildApp } from './app.js'
 import { config } from './config.js'
+import { startPlaybackWatcher } from './services/playback.js'
 
 const app = await buildApp()
+
+// 「已播出」由时间自动判定，启动跑一次，之后每 5 分钟一次
+startPlaybackWatcher((count) => app.log.info(`自动标记 ${count} 首为已播出`))
 
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.on(signal, () => {

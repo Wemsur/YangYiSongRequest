@@ -30,6 +30,10 @@ export const config = {
   sqliteFile,
   /** 全站统一时区：库里存 UTC，展示与排期按这个时区换算 */
   timezone: 'Asia/Shanghai',
+  /** 管理端 JWT 签名密钥。生产必须给，缺了直接启动失败，不允许用默认值 */
+  jwtSecret: process.env.JWT_SECRET ?? '',
+  /** 登录态有效期 */
+  sessionMaxAgeSec: 12 * 60 * 60,
   /**
    * 酷狗上游 sidecar（kugoumusicapi）的地址，取址与将来的扫码登录走它。
    * 置空则只用直连实现；连不上会自动回落，不会让酷狗整源不可用。

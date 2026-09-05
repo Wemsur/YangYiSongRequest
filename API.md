@@ -35,7 +35,7 @@ Prisma 7 的两处约定：`datasource` 块里不再写 `url`，迁移用的数�
 
 ## 前台接口
 
-已实现（S4）。歌单相关的三个接口在 S5 补。
+已实现（S4 + S5）。歌单只露出 `SCHEDULED` 与 `PLAYED` 的歌，且返回体里没有任何点歌人字段。
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
@@ -46,9 +46,9 @@ Prisma 7 的两处约定：`datasource` 块里不再写 `url`，迁移用的数�
 | GET | `/api/lyric/:source/:platformId` | 返回 `{ lyric: string \| null }` |
 | POST | `/api/requests` | 提交点歌，body：source, platformId, grade?, classNo?, requesterName? |
 | GET | `/api/requests/:code` | 凭查询码查状态，不返回任何提交人信息 |
-| GET | `/api/playlist/recent` | S5：最近歌单（昨天 + 今天 + 未来已排期） |
-| GET | `/api/playlist/months` | S5：有歌单的月份列表 |
-| GET | `/api/playlist/date/:date` | S5：指定日期歌单 |
+| GET | `/api/playlist/recent` | 最近歌单：昨天 + 今天 + 未来所有已排期日期 |
+| GET | `/api/playlist/months` | 过往（前天及更早）有歌的日期，按月分组倒序 |
+| GET | `/api/playlist/date/:date` | 指定日期歌单 |
 
 `POST /api/requests` 成功返回 201 与 `{ queryCode }`。身份三项在「要求填写身份」开启时必填、关闭时必须缺省，不匹配返回 400。歌曲信息一律以音源返回的为准，不采信前端传的时长与标题。
 
@@ -56,30 +56,37 @@ Prisma 7 的两处约定：`datasource` 块里不再写 `url`，迁移用的数�
 
 ## 管理接口
 
+S6 已实现的部分标了「已」，其余是 S7 / S8 的坑位。
+
 | 方法 | 路径 | 权限 | 说明 |
 | --- | --- | --- | --- |
-| POST | `/api/admin/login` | — | 成功后下发 httpOnly cookie |
-| POST | `/api/admin/logout` | 登录 | |
-| POST | `/api/admin/password` | 登录 | 修改自己的密码 |
-| GET | `/api/admin/requests?status=&date=` | 审核员 | 点歌列表，含提交人与敏感词标记 |
-| POST | `/api/admin/requests/:id/schedule` | 审核员 | 通过并排期，body：playDate, slotId, orderNo |
-| POST | `/api/admin/requests/:id/reject` | 审核员 | body：reason |
-| POST | `/api/admin/requests/batch` | 审核员 | 批量通过、批量排到某天 |
-| POST | `/api/admin/schedule/reorder` | 审核员 | 同时段重排，body：playDate, slotId, orderedIds |
-| POST | `/api/admin/requests/manual` | 审核员 | 补录歌曲 |
-| GET | `/api/admin/download/song/:id` | 审核员 | 单曲下载 |
-| GET | `/api/admin/download/day/:date?slotId=` | 审核员 | 流式 zip |
-| GET | `/api/admin/export/day/:date` | 审核员 | 播出单 Excel |
-| GET / PUT | `/api/admin/config/slots` | 超管 | 播出时段 |
-| GET / PUT | `/api/admin/config/calendar` | 超管 | 行政历 |
-| GET / PUT | `/api/admin/config/grades` | 超管 | 年级班数 |
-| GET / PUT | `/api/admin/config/words` | 超管 | 敏感词 |
-| GET / PUT | `/api/admin/config/site` | 超管 | 点歌开关、身份填写开关、公告 |
-| POST | `/api/admin/sources/netease/qrcode` | 超管 | 生成扫码登录二维码 |
-| GET | `/api/admin/sources/netease/qrcode/check` | 超管 | 轮询扫码状态，成功即写入 Cookie |
-| GET | `/api/admin/sources/health` | 超管 | 三家音源可用性自检 |
-| GET / POST / PATCH | `/api/admin/users` | 超管 | 账号管理 |
-| GET | `/api/admin/audit?page=` | 超管 | 操作日志 |
+| POST | `/api/admin/login` | — | 已。成功后下发 httpOnly cookie，限流 10 次/10 分钟 |
+| POST | `/api/admin/logout` | 登录 | 已 |
+| GET | `/api/admin/me` | — | 已。未登录返回 `null`，前端据此决定跳不跳登录页 |
+| POST | `/api/admin/password` | 登录 | 已。body：current, next（至少 8 位） |
+| GET | `/api/admin/requests?status=&date=&page=` | 审核员 | 已。含提交人、敏感词命中、排期信息 |
+| GET | `/api/admin/schedule/:date` | 审核员 | 已。某天各时段的排期总览，带容量与总时长 |
+| POST | `/api/admin/requests/:id/schedule` | 审核员 | 已。body：playDate, slotId；一律追加到该时段末尾 |
+| POST | `/api/admin/requests/:id/reject` | 审核员 | 已。body：reason（必填） |
+| POST | `/api/admin/requests/:id/unschedule` | 审核员 | 已。撤下排期，回到待审核 |
+| POST | `/api/admin/requests/batch` | 审核员 | 已。body：ids, action(schedule\|reject), playDate?, slotId?, reason?；逐条回报失败原因 |
+| POST | `/api/admin/schedule/reorder` | 审核员 | 已。body：playDate, slotId, orderedIds（必须是该时段的全部歌） |
+| POST | `/api/admin/requests/manual` | 审核员 | 已。补录歌曲，给了 playDate + slotId 就直接排上 |
+| GET | `/api/admin/audit?page=` | 超管 | 已。操作日志 |
+| GET | `/api/admin/download/song/:id` | 审核员 | S8 单曲下载 |
+| GET | `/api/admin/download/day/:date?slotId=` | 审核员 | S8 流式 zip |
+| GET | `/api/admin/export/day/:date` | 审核员 | S8 播出单 Excel |
+| GET / PUT | `/api/admin/config/slots` | 超管 | S7 播出时段 |
+| GET / PUT | `/api/admin/config/calendar` | 超管 | S7 行政历 |
+| GET / PUT | `/api/admin/config/grades` | 超管 | S7 年级班数 |
+| GET / PUT | `/api/admin/config/words` | 超管 | S7 敏感词 |
+| GET / PUT | `/api/admin/config/site` | 超管 | S7 点歌开关、身份填写开关、公告 |
+| POST | `/api/admin/sources/netease/qrcode` | 超管 | S7 生成扫码登录二维码 |
+| GET | `/api/admin/sources/netease/qrcode/check` | 超管 | S7 轮询扫码状态，成功即写入 Cookie |
+| GET | `/api/admin/sources/health` | 超管 | S7 三家音源可用性自检 |
+| GET / POST / PATCH | `/api/admin/users` | 超管 | S7 账号管理 |
 
-错误响应统一 `{ error: { code, message } }`。403 表示权限不足，429 表示触发限流。
+错误响应统一 `{ error: { code, message } }`。401 未登录，403 权限不足，429 触发限流。
+
+排期的校验顺序：日期格式 → 不能排到过去 → 不超过 `maxScheduleDays` → 行政历标记（`SCHOOL` 才行，没标记的工作日按可播）→ 周末拦截 → 时段存在且启用。容量超了只在响应里带 `capacity.message` 提示，不拒绝请求。
 

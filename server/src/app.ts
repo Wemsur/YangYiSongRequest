@@ -2,14 +2,19 @@ import { existsSync } from 'node:fs'
 import Fastify from 'fastify'
 import type { FastifyError } from 'fastify'
 import cookie from '@fastify/cookie'
+import jwt from '@fastify/jwt'
 import rateLimit from '@fastify/rate-limit'
 import fastifyStatic from '@fastify/static'
 import { config } from './config.js'
+import { assertAuthConfigured } from './lib/auth.js'
 import { AppError } from './lib/errors.js'
+import { adminRoutes } from './routes/admin.js'
 import { publicRoutes } from './routes/public.js'
 import { SourceError } from './sources/types.js'
 
 export async function buildApp() {
+  assertAuthConfigured()
+
   const app = Fastify({
     logger: { level: config.isProd ? 'info' : 'debug' },
     // Render 把服务放在反向代理后面，不开这个拿不到真实客户端 IP，限流会失效
@@ -18,6 +23,7 @@ export async function buildApp() {
   })
 
   await app.register(cookie)
+  await app.register(jwt, { secret: config.jwtSecret })
   // 粗粒度兜底限流；点歌提交等接口在 S4 单独设更严的阈值
   await app.register(rateLimit, { max: 240, timeWindow: '1 minute' })
 
@@ -63,6 +69,7 @@ export async function buildApp() {
   })
 
   await app.register(publicRoutes)
+  await app.register(adminRoutes)
 
   const hasWebDist = existsSync(config.webDist)
   if (hasWebDist) {

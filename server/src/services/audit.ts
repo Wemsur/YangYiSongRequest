@@ -1,0 +1,29 @@
+// 操作日志：谁、何时、对哪条、做了什么（CONTEXT.md 第 6 节）。
+// 写日志失败不能让主流程回滚，所以这里自己吞掉异常只记 warn。
+import { prisma } from '../lib/db.js'
+import { encodeDetail } from '../lib/domain.js'
+
+export type AuditAction =
+  | 'login'
+  | 'password.change'
+  | 'request.schedule'
+  | 'request.reject'
+  | 'request.manual'
+  | 'schedule.reorder'
+  | 'schedule.remove'
+  | 'request.batch'
+
+export async function writeAudit(
+  actorId: string | null,
+  action: AuditAction,
+  targetId: string | null,
+  detail?: unknown,
+): Promise<void> {
+  try {
+    await prisma.auditLog.create({
+      data: { actorId, action, targetId, detail: encodeDetail(detail) },
+    })
+  } catch {
+    // 日志写不进去不该影响业务，调用方也不需要知道
+  }
+}
