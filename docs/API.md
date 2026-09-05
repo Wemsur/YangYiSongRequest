@@ -5,7 +5,7 @@
 
 ## 数据模型
 
-结构以 [server/prisma/schema.prisma](server/prisma/schema.prisma) 为唯一准绳，本节只记录约束与意图，改 schema 时同步这里。
+结构以 [server/prisma/schema.prisma](../server/prisma/schema.prisma) 为唯一准绳，本节只记录约束与意图，改 schema 时同步这里。
 
 | 模型 | 作用 | 关键约束 |
 | --- | --- | --- |
@@ -14,7 +14,7 @@
 | `BroadcastSlot` | 播出时段 | `name` 唯一；`startTime` / `endTime` 是 `HH:mm` 字符串，按 Asia/Shanghai 解读；`maxCount` / `maxMs` 空表示不限；被排期引用时禁止删除 |
 | `CalendarDay` | 行政历 | 主键就是 `YYYY-MM-DD` 字符串；`kind` 为 `SCHOOL` / `OFF` / `EXAM_NO_BROADCAST`，只有 `SCHOOL` 可排期 |
 | `AdminUser` | 管理员 | `username` 唯一；`role` 为 `SUPER` / `REVIEWER`；`mustChangePassword` 用于强制首次改密 |
-| `AuditLog` | 操作日志 | `actorId` 可空（账号删除后仍保留记录）；`detail` 是 JSON 字符串 |
+| `AuditLog` | 操作日志 | `actorId` 可空（账号删除后仍保留记录）；记录请求 IP 与 User-Agent；`detail` 是 JSON 字符串 |
 | `GradeConfig` | 年级班数 | 主键即年级，默认 23 |
 | `BannedWord` | 敏感词 | 主键即词本身 |
 | `SourceCredential` | 音源凭据 | 主键即音源；`encryptedData` 为 AES-256-GCM 密文，iv 与 authTag 一并编码在内 |
@@ -89,9 +89,8 @@ S6 已实现的部分标了「已」，其余是 S7 / S8 的坑位。
 | GET / POST | `/api/admin/users` | 超管 | 已。建账号：username 3–20、password ≥8、role |
 | PATCH | `/api/admin/users/:id` | 超管 | 已。disabled / role / password；不能停用或降级自己 |
 
-错误响应统一 `{ error: { code, message } }`。401 未登录，403 权限不足，429 触发限流。
+错误响应统一 `{ error: { code, message, detail? } }`。`detail` 仅承载可安全返回的结构化上下文，例如字段名、限额和重试时间；401 未登录，403 权限不足，429 触发限流。限流阈值集中定义在 `server/src/lib/rate-limits.ts`。
 
 排期的校验顺序：日期格式 → 不能排到过去 → 不超过 `maxScheduleDays` → 行政历标记（`SCHOOL` 才行，没标记的工作日按可播）→ 周末拦截 → 时段存在且启用。容量超了只在响应里带 `capacity.message` 提示，不拒绝请求。
 
 下载类接口的三点约定：文件名走 `Content-Disposition` 的 `filename*=UTF-8''`，纯 `filename` 里的中文会被浏览器存成乱码；zip 用 store 不压缩，音频本身已是压缩格式，再压没收益只费时间；单曲取不到地址时整包不失败，改为在压缩包里放一份「缺失清单.txt」，附上失败原因。
-

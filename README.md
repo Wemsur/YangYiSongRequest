@@ -2,7 +2,7 @@
 
 学生免登录点歌，管理员试听审核、排进播出时段，按天打包下载当天要播的音频。
 
-文档：[CONTEXT.md](CONTEXT.md) 架构与长期约定 · [REQUIREMENTS.md](REQUIREMENTS.md) 需求与验收 · [PROGRESS.md](PROGRESS.md) 进度 · [API.md](API.md) 接口 · [DEPLOY.md](DEPLOY.md) 部署
+文档：[CONTEXT.md](docs/CONTEXT.md) 架构与长期约定 · [REQUIREMENTS.md](REQUIREMENTS.md) 需求与验收 · [PROGRESS.md](PROGRESS.md) 进度 · [API.md](docs/API.md) 接口 · [DEPLOY.md](docs/DEPLOY.md) 部署
 
 ## 本地跑起来
 

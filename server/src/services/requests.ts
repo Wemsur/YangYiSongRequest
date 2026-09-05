@@ -5,13 +5,12 @@ import { prisma } from '../lib/db.js'
 import { GRADE_LABELS, STATUS_LABELS, encodeWordList, isGrade, isRequestStatus } from '../lib/domain.js'
 import type { Grade, RequestStatus, SourceId } from '../lib/domain.js'
 import { AppError, badRequest, forbidden, notFound, tooMany } from '../lib/errors.js'
+import { IDENTITY_DAILY_LIMIT, IP_DAILY_LIMIT } from '../lib/rate-limits.js'
 import { shanghaiDayStart } from '../lib/time.js'
 import { getSource } from '../sources/index.js'
 import { findBannedHits } from './banned-words.js'
 import { readSite } from './site.js'
 
-const IP_DAILY_LIMIT = 10
-const IDENTITY_DAILY_LIMIT = 2
 /** 去掉了容易看错的 0 O 1 I L */
 const CODE_ALPHABET = '23456789ABCDEFGHJKMNPQRSTUVWXYZ'
 
@@ -38,7 +37,7 @@ function newQueryCode(): string {
 const isUniqueViolation = (error: unknown): boolean =>
   typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002'
 
-function normalizeIdentity(
+export function normalizeIdentity(
   input: SubmitInput,
   required: boolean,
   classCounts: Record<Grade, number>,
@@ -65,6 +64,21 @@ function normalizeIdentity(
   return { grade, classNo, requesterName }
 }
 
+export function assertDailyLimits(ipUsed: number, identityUsed: number | null): void {
+  if (ipUsed >= IP_DAILY_LIMIT) {
+    throw tooMany('RATE_LIMIT_IP', `这台设备今天已经点了 ${IP_DAILY_LIMIT} 次，明天再来`, {
+      limit: IP_DAILY_LIMIT,
+      window: 'day',
+    })
+  }
+  if (identityUsed !== null && identityUsed >= IDENTITY_DAILY_LIMIT) {
+    throw tooMany('RATE_LIMIT_IDENTITY', `每人每天最多点 ${IDENTITY_DAILY_LIMIT} 首，明天再来`, {
+      limit: IDENTITY_DAILY_LIMIT,
+      window: 'day',
+    })
+  }
+}
+
 export async function submitRequest(input: SubmitInput, ip: string): Promise<{ queryCode: string }> {
   const site = await readSite()
   if (!site.requestsOpen) throw forbidden('REQUESTS_CLOSED', '点歌通道现在关着，等台里再开')
@@ -83,12 +97,9 @@ export async function submitRequest(input: SubmitInput, ip: string): Promise<{ q
   const ipUsed = await prisma.songRequest.count({
     where: { submitIp: ip, createdAt: { gte: since } },
   })
-  if (ipUsed >= IP_DAILY_LIMIT) {
-    throw tooMany('RATE_LIMIT_IP', `这台设备今天已经点了 ${IP_DAILY_LIMIT} 次，明天再来`)
-  }
-
+  let identityUsed: number | null = null
   if (identity) {
-    const used = await prisma.songRequest.count({
+    identityUsed = await prisma.songRequest.count({
       where: {
         grade: identity.grade,
         classNo: identity.classNo,
@@ -96,10 +107,8 @@ export async function submitRequest(input: SubmitInput, ip: string): Promise<{ q
         createdAt: { gte: since },
       },
     })
-    if (used >= IDENTITY_DAILY_LIMIT) {
-      throw tooMany('RATE_LIMIT_IDENTITY', `每人每天最多点 ${IDENTITY_DAILY_LIMIT} 首，明天再来`)
-    }
   }
+  assertDailyLimits(ipUsed, identityUsed)
 
   const flagged = await findBannedHits(song.title, song.artist)
 

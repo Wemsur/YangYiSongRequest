@@ -8,11 +8,13 @@ import fastifyStatic from '@fastify/static'
 import { config } from './config.js'
 import { assertAuthConfigured } from './lib/auth.js'
 import { AppError } from './lib/errors.js'
+import { GLOBAL_RATE_LIMIT } from './lib/rate-limits.js'
 import { adminRoutes } from './routes/admin.js'
 import { adminConfigRoutes } from './routes/admin-config.js'
 import { adminDownloadRoutes } from './routes/admin-download.js'
 import { publicRoutes } from './routes/public.js'
 import { SourceError } from './sources/types.js'
+import { runWithAuditContext } from './services/audit.js'
 
 export async function buildApp() {
   assertAuthConfigured()
@@ -27,7 +29,13 @@ export async function buildApp() {
   await app.register(cookie)
   await app.register(jwt, { secret: config.jwtSecret })
   // 粗粒度兜底限流；点歌提交等接口在 S4 单独设更严的阈值
-  await app.register(rateLimit, { max: 240, timeWindow: '1 minute' })
+  await app.register(rateLimit, GLOBAL_RATE_LIMIT)
+  app.addHook('onRequest', (request, _reply, done) => {
+    runWithAuditContext(
+      { ip: request.ip, userAgent: request.headers['user-agent'] },
+      done,
+    )
+  })
 
   // 保活探针：必须极轻，不查数据库（见 DEPLOY.md）
   app.get('/healthz', { config: { rateLimit: false } }, async () => ({
@@ -43,7 +51,13 @@ export async function buildApp() {
   // 错误一律收敛成 { error: { code, message } }，message 是给学生看的中文
   app.setErrorHandler((error: FastifyError, request, reply) => {
     if (error instanceof AppError) {
-      return reply.code(error.statusCode).send({ error: { code: error.code, message: error.message } })
+      return reply.code(error.statusCode).send({
+        error: {
+          code: error.code,
+          message: error.message,
+          ...(error.detail ? { detail: error.detail } : {}),
+        },
+      })
     }
     if (error instanceof SourceError) {
       request.log.warn({ err: error, source: error.source }, '音源请求失败')

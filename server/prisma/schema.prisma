@@ -103,11 +103,13 @@ model AuditLog {
   action    String
   targetId  String?
   detail    String? // JSON 字符串
+  ip        String?
+  userAgent String?
   createdAt DateTime   @default(now())
 
   @@index([createdAt])
+  @@index([actorId, createdAt])
 }
-
 /// 每个年级的班级数量，超管可调。
 model GradeConfig {
   grade      String @id // G1 | G2 | G3

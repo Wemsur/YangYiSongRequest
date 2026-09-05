@@ -2,7 +2,7 @@
 
 > 本文件是项目的长期记忆。新会话开始前先读它。改动技术栈、数据模型、设计 token 或关键约定时，必须同步更新本文件。
 >
-> 姊妹文档：[REQUIREMENTS.md](REQUIREMENTS.md) 功能需求与验收 · [PROGRESS.md](PROGRESS.md) 进度与待办 · [API.md](API.md) 接口契约 · [DEPLOY.md](DEPLOY.md) 部署与环境变量
+> 姊妹文档：[REQUIREMENTS.md](../REQUIREMENTS.md) 功能需求与验收 · [PROGRESS.md](../PROGRESS.md) 进度与待办 · [API.md](API.md) 接口契约 · [DEPLOY.md](DEPLOY.md) 部署与环境变量
 
 ## 1. 项目是什么
 
@@ -150,7 +150,7 @@ YangYiSongRequest/
 - 点歌人信息（年级 + 班级 + 姓名）仅管理员可见，前台歌单与查询码结果页都不展示。
 - 前台永不暴露平台真实音频直链，试听与下载都经后端代理。
 - 提交点歌后返回 6 位查询码，是学生查询自己那条记录的唯一凭据。
-- 所有管理操作写入 AuditLog（谁、何时、对哪条、做了什么）。
+- 所有管理操作写入 AuditLog（谁、何时、来源 IP 与 User-Agent、对哪条、做了什么）。
 - 密码 argon2id；音源 Cookie 用 AES-256-GCM 加密存库，密钥取自环境变量 `CREDENTIAL_KEY`。
 - 提交与查询接口带 IP 限流，具体阈值见 REQUIREMENTS.md。
 - 数据模型只以 `server/prisma/schema.prisma` 为准，API.md 里那份是约束摘要，改 schema 要顺手更新它。
@@ -168,4 +168,3 @@ YangYiSongRequest/
 - QQ 与酷狗没有会员账号，可下载音质可能不足以直接播出，这是已确认的取舍。付费歌在 QQ 只有试听片段，在酷狗一个地址都没有；网易云配上会员 Cookie 后可取完整曲。
 - SQLite 单文件的代价是备份要靠自己：升级或迁移前先拷 `server/data/app.db` 及其 `-wal`、`-shm`。
 - 站内需有一页使用声明，说明音频来源与「仅用于校内广播」的用途限制。
-
