@@ -20,6 +20,9 @@ import type {
 // module.exports，再套上它自带的 interface.d.ts 类型。
 const requireCjs = createRequire(import.meta.url)
 const netease = requireCjs('NeteaseCloudMusicApi') as typeof NeteaseApi
+
+/** 扫码登录（S7）也要用这个包，从这里透出去，别在别处再 createRequire 一遍 */
+export const neteaseApi = netease
 const { search, song_detail, song_url_v1, lyric: neteaseLyric } = netease
 
 // 这个包把搜索类型和音质等级声明成 const enum，运行时并不存在对应的对象，

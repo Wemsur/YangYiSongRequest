@@ -9,6 +9,7 @@ import { config } from './config.js'
 import { assertAuthConfigured } from './lib/auth.js'
 import { AppError } from './lib/errors.js'
 import { adminRoutes } from './routes/admin.js'
+import { adminConfigRoutes } from './routes/admin-config.js'
 import { publicRoutes } from './routes/public.js'
 import { SourceError } from './sources/types.js'
 
@@ -70,6 +71,7 @@ export async function buildApp() {
 
   await app.register(publicRoutes)
   await app.register(adminRoutes)
+  await app.register(adminConfigRoutes)
 
   const hasWebDist = existsSync(config.webDist)
   if (hasWebDist) {

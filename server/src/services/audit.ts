@@ -12,6 +12,16 @@ export type AuditAction =
   | 'schedule.reorder'
   | 'schedule.remove'
   | 'request.batch'
+  | 'config.site'
+  | 'config.slots'
+  | 'config.calendar'
+  | 'config.grades'
+  | 'config.words'
+  | 'source.login'
+  | 'source.cookie'
+  | 'source.clear'
+  | 'user.create'
+  | 'user.update'
 
 export async function writeAudit(
   actorId: string | null,

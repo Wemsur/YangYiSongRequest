@@ -57,7 +57,8 @@ QQ 为什么没换成上游：[Rain120/qq-music-api](https://github.com/Rain120/
 约定：
 
 - 不做跨源匹配下载。学生从 QQ/酷狗点的歌就用该源自己的地址下载；拿不到高音质就在后台标注实际码率，由管理员决定是否驳回。
-- Cookie 由管理员在后台「音源账号」页配置，AES-256-GCM 加密存库，绝不写进代码或提交到仓库。适配层通过注入的 `CookieProvider` 取 Cookie，自己不碰数据库。
+- 音源 Cookie 由管理员在后台「音源」页配置，AES-256-GCM 加密存库（`lib/crypto.ts`，密钥取自 `CREDENTIAL_KEY`，用 sha256 派生成 32 字节），绝不写进代码或提交到仓库。适配层通过注入的 `CookieProvider` 取 Cookie，自己不碰数据库；`server.ts` 启动时把 `services/credentials.ts` 的 `readCookie` 注进去。
+- `CREDENTIAL_KEY` 是按需读取而不是启动时校验：没配也能把服务跑起来，只是存不了 Cookie，后台页面会明确提示。这跟 `JWT_SECRET`（启动即校验）不一样，因为登录是必需功能，音源会员不是。
 - 网易云走官方扫码登录接口拿 Cookie（后台显示二维码，用网易云 App 扫码）。内嵌官方登录页不可行，对方站点有 X-Frame-Options 限制。
 - 这些都是第三方非公开接口，随时可能失效。`npm test` 只测归一化逻辑（mock 掉 fetch），真实连通性靠 `smoke:sources` 手动跑。
 

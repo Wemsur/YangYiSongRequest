@@ -76,15 +76,18 @@ S6 已实现的部分标了「已」，其余是 S7 / S8 的坑位。
 | GET | `/api/admin/download/song/:id` | 审核员 | S8 单曲下载 |
 | GET | `/api/admin/download/day/:date?slotId=` | 审核员 | S8 流式 zip |
 | GET | `/api/admin/export/day/:date` | 审核员 | S8 播出单 Excel |
-| GET / PUT | `/api/admin/config/slots` | 超管 | S7 播出时段 |
-| GET / PUT | `/api/admin/config/calendar` | 超管 | S7 行政历 |
-| GET / PUT | `/api/admin/config/grades` | 超管 | S7 年级班数 |
-| GET / PUT | `/api/admin/config/words` | 超管 | S7 敏感词 |
-| GET / PUT | `/api/admin/config/site` | 超管 | S7 点歌开关、身份填写开关、公告 |
-| POST | `/api/admin/sources/netease/qrcode` | 超管 | S7 生成扫码登录二维码 |
-| GET | `/api/admin/sources/netease/qrcode/check` | 超管 | S7 轮询扫码状态，成功即写入 Cookie |
-| GET | `/api/admin/sources/health` | 超管 | S7 三家音源可用性自检 |
-| GET / POST / PATCH | `/api/admin/users` | 超管 | S7 账号管理 |
+| GET / PUT | `/api/admin/config/slots` | 超管 | 已。PUT 整表提交，被排期引用的时段不许删 |
+| GET / PUT | `/api/admin/config/calendar` | 超管 | 已。GET 带 ?month=YYYY-MM；PUT 的 kind 传 null 表示清掉标记 |
+| GET / PUT | `/api/admin/config/grades` | 超管 | 已。body：counts |
+| GET / PUT | `/api/admin/config/words` | 超管 | 已。PUT 整表替换 |
+| GET / PUT | `/api/admin/config/site` | 超管 | 已。点歌开关、身份填写开关、公告、最远可排天数 |
+| POST | `/api/admin/sources/netease/qrcode` | 超管 | 已。返回 key 与 data:image/png 的二维码 |
+| GET | `/api/admin/sources/netease/qrcode/check?key=` | 超管 | 已。状态 waiting/scanned/expired/ok，ok 时写入 Cookie |
+| GET | `/api/admin/sources` | 超管 | 已。三家的 Cookie 配置情况与上次体检结果 |
+| GET | `/api/admin/sources/health` | 超管 | 已。三家并行体检，顺手记录结果 |
+| PUT / DELETE | `/api/admin/sources/:source/cookie` | 超管 | 已。手工粘贴或清除 Cookie |
+| GET / POST | `/api/admin/users` | 超管 | 已。建账号：username 3–20、password ≥8、role |
+| PATCH | `/api/admin/users/:id` | 超管 | 已。disabled / role / password；不能停用或降级自己 |
 
 错误响应统一 `{ error: { code, message } }`。401 未登录，403 权限不足，429 触发限流。
 

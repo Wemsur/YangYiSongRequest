@@ -3,7 +3,12 @@
 import 'dotenv/config'
 import { buildApp } from './app.js'
 import { config } from './config.js'
+import { readCookie } from './services/credentials.js'
 import { startPlaybackWatcher } from './services/playback.js'
+import { useCookieProvider } from './sources/index.js'
+
+// 音源适配层从这里拿会员 Cookie（加密存库，S7 的后台页面负责写入）
+useCookieProvider(readCookie)
 
 const app = await buildApp()
 
