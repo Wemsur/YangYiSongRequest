@@ -27,10 +27,11 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 
 ## Docker 部署（推荐）
 
-项目提供多阶段 Dockerfile，支持 SQLite 和 PostgreSQL。
+镜像已自动构建并发布到 GHCR：`ghcr.io/wemsur/yangyisongrequest:latest`（或具体 tag）。
+
+### 快速开始（SQLite）
 
 ```bash
-docker build -t ghcr.io/wemsur/yangyisongrequest:latest .
 docker run -d --name yysong \
   -p 3000:3000 \
   -e DATABASE_PROVIDER=sqlite \
@@ -39,7 +40,7 @@ docker run -d --name yysong \
   ghcr.io/wemsur/yangyisongrequest:latest
 ```
 
-PostgreSQL 示例：
+### PostgreSQL
 
 ```bash
 docker run -d --name yysong \
@@ -49,9 +50,38 @@ docker run -d --name yysong \
   ghcr.io/wemsur/yangyisongrequest:latest
 ```
 
-镜像已自动发布到 GHCR：`ghcr.io/wemsur/yangyisongrequest:latest`（或具体 tag）。
+### docker-compose 示例
 
-## 首次部署（原生 Node）
+```yaml
+version: "3.8"
+services:
+  app:
+    image: ghcr.io/wemsur/yangyisongrequest:latest
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_PROVIDER: sqlite
+      DATABASE_URL: file:/data/app.db
+      JWT_SECRET: changeme
+      CREDENTIAL_KEY: changeme32bytes
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+```
+
+### 注意事项
+
+- SQLite 必须挂载卷持久化 `/data`
+- 切换数据库类型后需重新拉取镜像（Prisma Client 在构建时确定）
+- 健康检查端点：`GET /api/health`
+- 更新镜像：`docker pull` + `docker restart`
+
+## 原生 Node 部署
 
 服务器上要有 Node 20 以上。SQLite 模式使用 `better-sqlite3`；Linux x64 有官方预编译包，冷门架构需要 `python3`、`make`、`g++`。PostgreSQL 模式需要预先创建空数据库和可建表用户。
 

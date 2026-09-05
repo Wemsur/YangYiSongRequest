@@ -2,11 +2,25 @@
 
 学生免登录点歌，管理员试听审核、排进播出时段，按天打包下载当天要播的音频。
 
-文档：[CONTEXT.md](docs/CONTEXT.md) 架构与长期约定 · [REQUIREMENTS.md](REQUIREMENTS.md) 需求与验收 · [PROGRESS.md](PROGRESS.md) 进度 · [API.md](docs/API.md) 接口 · [DEPLOY.md](docs/DEPLOY.md) 部署
+文档：[CONTEXT.md](docs/CONTEXT.md) 架构与长期约定 · [REQUIREMENTS.md](docs/REQUIREMENTS.md) 需求与验收 · [PROGRESS.md](docs/PROGRESS.md) 进度 · [API.md](docs/API.md) API 契约 · [DEPLOY.md](docs/DEPLOY.md) 部署
 
-## 本地跑起来
+## 快速开始（推荐 Docker）
 
-需要 Node 20 以上（本机实测 24.16）。默认使用 SQLite，也可连接 PostgreSQL，配置见部署文档。也可直接使用 Docker 镜像（见 docs/DEPLOY.md）。
+```bash
+docker run -d --name yysong -p 3000:3000 \
+  -e DATABASE_PROVIDER=sqlite \
+  -e DATABASE_URL=file:/data/app.db \
+  -v $(pwd)/data:/data \
+  ghcr.io/wemsur/yangyisongrequest:latest
+```
+
+浏览器打开 `http://localhost:3000/admin` 即可使用管理后台。
+
+完整部署与配置见 [docs/DEPLOY.md](docs/DEPLOY.md)。
+
+## 本地开发（Node）
+
+需要 Node 20 以上（本机实测 24.16）。默认使用 SQLite，也可连接 PostgreSQL，配置见部署文档。
 
 安装依赖。这一步会顺带从 GitHub 拉酷狗上游服务，所以要有 git、并且网络能连上 GitHub：
 
@@ -58,16 +72,7 @@ npm run smoke:sources --workspace server
 
 以后台里开了会员，在管理后台配上 Cookie（S7）就能出更高音质，不用改代码。
 
-## 其他常用命令
-
-```bash
-npm test                              # 单测，不联网
-npm run typecheck                     # 前后端一起查类型
-npm run build                         # 构建前端 dist + 编译后端
-npm run studio --workspace server     # Prisma Studio，浏览器里看库
-```
-
-SQLite 备份可拷 `server/data/app.db`（连同 `-wal`、`-shm`）；PostgreSQL 使用 `pg_dump`。
+SQLite 备份：拷 `server/data/app.db`（连同 `-wal`、`-shm`）；PostgreSQL 使用 `pg_dump`。Docker 部署时只需持久化数据卷。
 
 ## 管理后台
 
