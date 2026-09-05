@@ -27,7 +27,7 @@
 | 后台组件 | 也自写 | 原计划用 Naive UI，实际做 S6 时发现需要的只有列表、`input[type=date]`、原生 select 和一个上下移动的排序列表，引一整套组件库再改样式反而更费事，还要多背 1MB 依赖。将来做复杂表格时再评估 |
 | 鉴权 | JWT（httpOnly cookie）+ argon2id | |
 | 测试 | Vitest | 重点覆盖音源适配器与排期冲突逻辑 |
-| 部署形态 | 单进程，Fastify 同时提供 API 与前端 dist | 少一个要维护的东西 |
+| 部署形态 | 单进程，Fastify 同时提供 API 与前端 dist；可选 Docker | 少一个要维护的东西；Docker 镜像自动构建并推送到 GHCR |
 
 默认 SQLite 不需要数据库服务器；PostgreSQL 模式连接已有实例。若采纳上游音源项目做 sidecar，那两个服务用 Docker 起最省事，届时再定。
 

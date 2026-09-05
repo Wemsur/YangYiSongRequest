@@ -25,7 +25,33 @@
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-## 首次部署
+## Docker 部署（推荐）
+
+项目提供多阶段 Dockerfile，支持 SQLite 和 PostgreSQL。
+
+```bash
+docker build -t ghcr.io/wemsur/yangyisongrequest:latest .
+docker run -d --name yysong \
+  -p 3000:3000 \
+  -e DATABASE_PROVIDER=sqlite \
+  -e DATABASE_URL=file:/data/app.db \
+  -v /opt/yysong/data:/data \
+  ghcr.io/wemsur/yangyisongrequest:latest
+```
+
+PostgreSQL 示例：
+
+```bash
+docker run -d --name yysong \
+  -p 3000:3000 \
+  -e DATABASE_PROVIDER=postgresql \
+  -e DATABASE_URL=postgresql://user:pass@db:5432/yysong \
+  ghcr.io/wemsur/yangyisongrequest:latest
+```
+
+镜像已自动发布到 GHCR：`ghcr.io/wemsur/yangyisongrequest:latest`（或具体 tag）。
+
+## 首次部署（原生 Node）
 
 服务器上要有 Node 20 以上。SQLite 模式使用 `better-sqlite3`；Linux x64 有官方预编译包，冷门架构需要 `python3`、`make`、`g++`。PostgreSQL 模式需要预先创建空数据库和可建表用户。
 

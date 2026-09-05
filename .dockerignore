@@ -1,0 +1,35 @@
+# Dependencies
+node_modules
+server/node_modules
+
+# Build output
+dist
+web/dist
+server/dist
+server/src/generated
+
+# Database & secrets
+server/data
+*.db
+*.db-shm
+*.db-wal
+.env
+.env.*
+
+# Git & IDE
+.git
+.gitignore
+.idea
+.vscode
+
+# Docs & tests (可选保留)
+docs
+*.md
+!README.md
+server/src/**/*.test.ts
+server/src/**/*.test.js
+
+# Misc
+.DS_Store
+*.log
+tmp

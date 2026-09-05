@@ -6,7 +6,7 @@
 
 ## 本地跑起来
 
-需要 Node 20 以上（本机实测 24.16）。默认使用 SQLite，也可连接 PostgreSQL，配置见部署文档。
+需要 Node 20 以上（本机实测 24.16）。默认使用 SQLite，也可连接 PostgreSQL，配置见部署文档。也可直接使用 Docker 镜像（见 docs/DEPLOY.md）。
 
 安装依赖。这一步会顺带从 GitHub 拉酷狗上游服务，所以要有 git、并且网络能连上 GitHub：
 
