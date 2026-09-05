@@ -1,13 +1,4 @@
-// 数据模型的说明性文档在 docs/API.md，改这里就要同步那份和 schema.postgresql.prisma。
-// 生成的 client 落在 server/src/generated/prisma，不进版本库。
-//
-// 默认使用 SQLite；PostgreSQL 部署使用 schema.postgresql.prisma。
-// 为保证两种数据库的数据结构和业务类型一致，不使用 SQLite 不支持的 enum、数组和 Json：
-//   - 原来的 5 个 enum 一律存字符串，取值由 src/lib/domain.ts 的联合类型与校验函数把关
-//   - flaggedWords 存 JSON 数组字符串
-//   - 日期存 "YYYY-MM-DD" 字符串，按 Asia/Shanghai 解读，天然避开时区偏移
-//   - AuditLog.detail 存 JSON 字符串
-
+// 与 schema.prisma 保持相同模型；修改数据结构时必须同步两份 schema 和两套迁移。
 generator client {
   provider     = "prisma-client"
   output       = "../src/generated/prisma"
@@ -15,26 +6,25 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
 }
 
-/// 一条点歌。身份三项在超管关闭「要求填写身份」时为空。
 model SongRequest {
   id            String     @id @default(cuid())
   queryCode     String     @unique
-  source        String // netease | qq | kugou
+  source        String
   platformId    String
   title         String
   artist        String
   album         String?
   durationMs    Int
   coverUrl      String?
-  grade         String? // G1 | G2 | G3
+  grade         String?
   classNo       Int?
   requesterName String?
-  status        String     @default("PENDING") // PENDING | SCHEDULED | PLAYED | REJECTED
+  status        String     @default("PENDING")
   rejectReason  String?
-  flaggedWords  String     @default("[]") // JSON 数组字符串
+  flaggedWords  String     @default("[]")
   isManual      Boolean    @default(false)
   submitIp      String
   createdAt     DateTime   @default(now())
@@ -48,12 +38,11 @@ model SongRequest {
   @@index([submitIp, createdAt])
 }
 
-/// 排期：日期 + 时段 + 顺序号，三者唯一。
 model Schedule {
   id        String        @id @default(cuid())
   requestId String        @unique
   request   SongRequest   @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  playDate  String // YYYY-MM-DD
+  playDate  String
   slotId    String
   slot      BroadcastSlot @relation(fields: [slotId], references: [id], onDelete: Restrict)
   orderNo   Int
@@ -63,7 +52,6 @@ model Schedule {
   @@index([playDate])
 }
 
-/// 播出时段。startTime / endTime 为 "HH:mm"，按 Asia/Shanghai 解读。
 model BroadcastSlot {
   id        String     @id @default(cuid())
   name      String     @unique
@@ -76,10 +64,9 @@ model BroadcastSlot {
   schedules Schedule[]
 }
 
-/// 行政历。只有 SCHOOL 的日期可以排期。
 model CalendarDay {
-  date String  @id // YYYY-MM-DD
-  kind String // SCHOOL | OFF | EXAM_NO_BROADCAST
+  date String  @id
+  kind String
   note String?
 }
 
@@ -87,7 +74,7 @@ model AdminUser {
   id                 String        @id @default(cuid())
   username           String        @unique
   passwordHash       String
-  role               String        @default("REVIEWER") // SUPER | REVIEWER
+  role               String        @default("REVIEWER")
   mustChangePassword Boolean       @default(false)
   disabled           Boolean       @default(false)
   lastLoginAt        DateTime?
@@ -102,7 +89,7 @@ model AuditLog {
   actor     AdminUser? @relation(fields: [actorId], references: [id], onDelete: SetNull)
   action    String
   targetId  String?
-  detail    String? // JSON 字符串
+  detail    String?
   ip        String?
   userAgent String?
   createdAt DateTime   @default(now())
@@ -110,9 +97,9 @@ model AuditLog {
   @@index([createdAt])
   @@index([actorId, createdAt])
 }
-/// 每个年级的班级数量，超管可调。
+
 model GradeConfig {
-  grade      String @id // G1 | G2 | G3
+  grade      String @id
   classCount Int
 }
 
@@ -121,9 +108,8 @@ model BannedWord {
   createdAt DateTime @default(now())
 }
 
-/// 音源账号凭据。encryptedData 是 AES-256-GCM 密文，iv 与 authTag 一并编码在内。
 model SourceCredential {
-  source        String    @id // netease | qq | kugou
+  source        String    @id
   encryptedData String
   updatedAt     DateTime  @updatedAt
   lastCheckAt   DateTime?
@@ -131,9 +117,6 @@ model SourceCredential {
   note          String?
 }
 
-/// 站点级开关。已用的 key：
-/// requestsOpen(布尔) 点歌通道 · requireIdentity(布尔) 是否要求填写年级班级姓名
-/// announcement(文本) 首页公告 · maxScheduleDays(整数) 最远可排天数
 model SiteSetting {
   key   String @id
   value String

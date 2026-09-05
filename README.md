@@ -6,7 +6,7 @@
 
 ## 本地跑起来
 
-需要 Node 20 以上（本机实测 24.16）。不需要 Docker，也不需要单独装数据库——数据库就是一个 SQLite 文件。
+需要 Node 20 以上（本机实测 24.16）。默认使用 SQLite，也可连接 PostgreSQL，配置见部署文档。
 
 安装依赖。这一步会顺带从 GitHub 拉酷狗上游服务，所以要有 git、并且网络能连上 GitHub：
 
@@ -67,7 +67,7 @@ npm run build                         # 构建前端 dist + 编译后端
 npm run studio --workspace server     # Prisma Studio，浏览器里看库
 ```
 
-数据库备份就是拷 `server/data/app.db`（连同 `-wal`、`-shm` 一起）。
+SQLite 备份可拷 `server/data/app.db`（连同 `-wal`、`-shm`）；PostgreSQL 使用 `pg_dump`。
 
 ## 管理后台
 

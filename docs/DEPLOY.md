@@ -1,15 +1,16 @@
 # DEPLOY — 自托管部署与运维
 
-> 部署形态：一个 Node 进程。Fastify 同时提供 API 和前端静态文件，数据库是同目录下的一个 SQLite 文件。
-> 不需要数据库服务器，不需要 Docker（若日后采纳上游音源项目做 sidecar，那两个服务再单独考虑）。
+> 部署形态：一个 Node 进程。Fastify 同时提供 API 和前端静态文件。
+> 数据库默认使用 SQLite，也可连接 PostgreSQL；两种模式使用相同业务模型和独立迁移目录。
 
 ## 环境变量
 
-放在 `server/.env`，模板见 [server/.env.example](server/.env.example)。
+放在 `server/.env`，模板见 [server/.env.example](../server/.env.example)。
 
 | 变量 | 说明 |
 | --- | --- |
-| `DATABASE_URL` | SQLite 文件，默认 `file:./data/app.db`，相对路径以 `server/` 为基准 |
+| `DATABASE_PROVIDER` | `sqlite`（默认）或 `postgresql` |
+| `DATABASE_URL` | SQLite 文件路径，或 PostgreSQL 连接串 |
 | `SEED_ADMIN_USER` | 初始超管用户名，默认 `yadmin`，只在跑种子时读取 |
 | `SEED_ADMIN_PASSWORD` | 初始密码，留空则随机生成并在终端打印一次 |
 | `PORT` | 监听端口，默认 3000 |
@@ -26,7 +27,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 
 ## 首次部署
 
-服务器上要有 Node 20 以上。`better-sqlite3` 是原生模块，Linux x64 有官方预编译包，直接装即可；架构冷门（比如 armv7）时需要先备好 `python3`、`make`、`g++`。
+服务器上要有 Node 20 以上。SQLite 模式使用 `better-sqlite3`；Linux x64 有官方预编译包，冷门架构需要 `python3`、`make`、`g++`。PostgreSQL 模式需要预先创建空数据库和可建表用户。
 
 ```bash
 git clone https://github.com/Wemsur/YangYiSongRequest.git
@@ -38,6 +39,22 @@ npm run start:prod
 ```
 
 `npm ci` 不要加 `--omit=dev`：`prisma` 是 devDependency，启动脚本要用它跑迁移。
+
+SQLite 配置：
+
+```dotenv
+DATABASE_PROVIDER="sqlite"
+DATABASE_URL="file:./data/app.db"
+```
+
+PostgreSQL 配置：
+
+```dotenv
+DATABASE_PROVIDER="postgresql"
+DATABASE_URL="postgresql://yysong:password@127.0.0.1:5432/yysong"
+```
+
+切换数据库类型后必须重新运行 `npm run build`，因为 Prisma Client 会按当前 provider 生成。SQLite 与 PostgreSQL 不自动搬运既有数据。
 
 `npm run start:prod` 会先 `prisma migrate deploy` 把迁移补齐，再启动服务。种子数据只需显式跑一次：
 
@@ -121,6 +138,8 @@ server {
 
 ## 备份
 
+### SQLite
+
 整个数据库就是一个文件，连带 WAL 一起拷走就行。停服拷最稳，不停服则用 SQLite 自己的备份命令：
 
 ```bash
@@ -128,6 +147,14 @@ sqlite3 server/data/app.db ".backup '/var/backups/yysong-$(date +%F).db'"
 ```
 
 排一条 crontab 每天跑一次、保留一两周即可。恢复就是把文件拷回 `server/data/app.db`（先停服，并清掉同名的 `-wal`、`-shm`）。
+
+### PostgreSQL
+
+```bash
+pg_dump --format=custom --file=/var/backups/yysong-$(date +%F).dump "$DATABASE_URL"
+```
+
+恢复前创建空数据库，再使用 `pg_restore --clean --if-exists --dbname="$DATABASE_URL" backup.dump`。生产环境应同时使用数据库服务自身的定期备份与保留策略。
 
 ## 升级
 
@@ -144,5 +171,4 @@ systemctl restart yysong
 ## 待补
 
 服务器的系统、部署路径、域名还没定下来，上面的 `/opt/YangYiSongRequest`、`yysong` 用户名都是占位，实际部署时替换并回填本文件。
-
 

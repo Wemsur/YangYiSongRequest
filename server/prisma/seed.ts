@@ -6,18 +6,25 @@ import 'dotenv/config'
 import { randomBytes } from 'node:crypto'
 import { hash } from '@node-rs/argon2'
 import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3'
+import { PrismaPg } from '@prisma/adapter-pg'
 import { PrismaClient } from '../src/generated/prisma/client.js'
 
-// 和 src/config.ts、prisma.config.ts 同一套路径解析：相对 server 包目录
-const sqliteFile = path.resolve(
-  import.meta.dirname,
-  '..',
-  (process.env.DATABASE_URL ?? 'file:./data/app.db').replace(/^file:/, ''),
-)
-mkdirSync(path.dirname(sqliteFile), { recursive: true })
+const provider = process.env.DATABASE_PROVIDER ?? 'sqlite'
+if (provider !== 'sqlite' && provider !== 'postgresql') {
+  throw new Error('DATABASE_PROVIDER 只能是 sqlite 或 postgresql')
+}
+
+const rawUrl = process.env.DATABASE_URL ?? 'file:./data/app.db'
+const sqliteFile =
+  provider === 'sqlite'
+    ? path.resolve(import.meta.dirname, '..', rawUrl.replace(/^file:/, ''))
+    : null
+if (sqliteFile) mkdirSync(path.dirname(sqliteFile), { recursive: true })
 
 const prisma = new PrismaClient({
-  adapter: new PrismaBetterSqlite3({ url: `file:${sqliteFile}` }),
+  adapter: sqliteFile
+    ? new PrismaBetterSqlite3({ url: `file:${sqliteFile}` })
+    : new PrismaPg({ connectionString: rawUrl }),
 })
 
 /** 台里现行时段；上限按每首约 4 分钟估，管理员可在后台调整 */

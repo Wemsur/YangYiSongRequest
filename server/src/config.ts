@@ -7,12 +7,20 @@ const pkg = JSON.parse(
   readFileSync(path.join(here, '..', 'package.json'), 'utf8'),
 ) as { version: string }
 
-/** SQLite 文件的绝对路径。相对路径以 server 包目录为基准，prisma.config.ts 里是同一套逻辑 */
-const sqliteFile = path.resolve(
-  here,
-  '..',
-  (process.env.DATABASE_URL ?? 'file:./data/app.db').replace(/^file:/, ''),
-)
+const databaseProvider = process.env.DATABASE_PROVIDER ?? 'sqlite'
+if (databaseProvider !== 'sqlite' && databaseProvider !== 'postgresql') {
+  throw new Error('DATABASE_PROVIDER 只能是 sqlite 或 postgresql')
+}
+
+const rawDatabaseUrl = process.env.DATABASE_URL ?? 'file:./data/app.db'
+if (databaseProvider === 'postgresql' && !/^postgres(ql)?:\/\//.test(rawDatabaseUrl)) {
+  throw new Error('使用 PostgreSQL 时必须提供 postgres:// 或 postgresql:// 格式的 DATABASE_URL')
+}
+
+const sqliteFile =
+  databaseProvider === 'sqlite'
+    ? path.resolve(here, '..', rawDatabaseUrl.replace(/^file:/, ''))
+    : null
 
 /**
  * 跑起服务所必需的几项集中在这里读取和校验，不在业务代码里散着读 process.env。
@@ -26,7 +34,9 @@ export const config = {
   version: pkg.version,
   /** 生产环境下前端构建产物的位置，由本服务直接托管 */
   webDist: path.resolve(here, '..', '..', 'web', 'dist'),
-  /** SQLite 数据库文件的绝对路径 */
+  databaseProvider,
+  databaseUrl: databaseProvider === 'sqlite' ? `file:${sqliteFile}` : rawDatabaseUrl,
+  /** SQLite 数据库文件的绝对路径；使用 PostgreSQL 时为空 */
   sqliteFile,
   /** 全站统一时区：库里存 UTC，展示与排期按这个时区换算 */
   timezone: 'Asia/Shanghai',

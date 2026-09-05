@@ -20,7 +20,7 @@
 | 运行时 | Node 20+ + TypeScript | 单语言全栈；三家音源的成熟开源实现以 Node 居多 |
 | 后端框架 | Fastify | 轻量、启动快、流式响应友好（试听代理 / zip 打包） |
 | ORM | Prisma 7 | 迁移可控、类型安全 |
-| 数据库 | SQLite（`@prisma/adapter-better-sqlite3`） | 自托管有持久磁盘；一天几十到几百条写入，单文件零运维，备份就是拷一个文件 |
+| 数据库 | SQLite / PostgreSQL | 默认 SQLite 零运维；需要外部数据库或多实例部署时可切换 PostgreSQL |
 | 前端 | Vue 3 + Vite + TypeScript | |
 | 样式 | Tailwind CSS + 自定义 token | 设计系统集中在 token 层，前台与后台共用 |
 | 前台组件 | 自写 | 视觉高度定制，组件库会拖累风格 |
@@ -29,7 +29,7 @@
 | 测试 | Vitest | 重点覆盖音源适配器与排期冲突逻辑 |
 | 部署形态 | 单进程，Fastify 同时提供 API 与前端 dist | 少一个要维护的东西 |
 
-数据库不需要 Docker，也不需要数据库服务器。若采纳上游音源项目做 sidecar，那两个服务用 Docker 起最省事，届时再定。
+默认 SQLite 不需要数据库服务器；PostgreSQL 模式连接已有实例。若采纳上游音源项目做 sidecar，那两个服务用 Docker 起最省事，届时再定。
 
 ## 3. 音源
 
@@ -113,8 +113,10 @@ YangYiSongRequest/
 ├─ server/
 │  ├─ data/               SQLite 数据库文件，不进版本库
 │  ├─ prisma/
-│  │  ├─ schema.prisma    数据模型的唯一准绳
-│  │  ├─ migrations/      迁移 SQL，随代码提交
+│  │  ├─ schema.prisma    SQLite 数据模型
+│  │  ├─ schema.postgresql.prisma  PostgreSQL 数据模型
+│  │  ├─ migrations/      SQLite 迁移 SQL，随代码提交
+│  │  ├─ migrations-postgresql/  PostgreSQL 迁移 SQL，随代码提交
 │  │  └─ seed.ts          种子：超管、时段、班数、站点开关
 │  ├─ prisma.config.ts    Prisma 7 的 CLI 配置（数据库路径、迁移目录、seed 命令）
 │  ├─ scripts/            smoke-sources.ts 真实联调音源
@@ -153,9 +155,9 @@ YangYiSongRequest/
 - 所有管理操作写入 AuditLog（谁、何时、来源 IP 与 User-Agent、对哪条、做了什么）。
 - 密码 argon2id；音源 Cookie 用 AES-256-GCM 加密存库，密钥取自环境变量 `CREDENTIAL_KEY`。
 - 提交与查询接口带 IP 限流，具体阈值见 REQUIREMENTS.md。
-- 数据模型只以 `server/prisma/schema.prisma` 为准，API.md 里那份是约束摘要，改 schema 要顺手更新它。
-- SQLite 存不了原生 enum、数组和 Json，所以：5 组取值全部存字符串，唯一来源是 `server/src/lib/domain.ts`（联合类型管编译期，`is*` 函数管运行期）；`flaggedWords` 与 `AuditLog.detail` 存 JSON 字符串，用 domain.ts 里的 encode/decode；日期一律存 `YYYY-MM-DD` 字符串按 Asia/Shanghai 解读，绕开时区偏移。
-- SQLite 相对路径有两套解析基准（CLI 按 schema 目录、运行时 adapter 按进程 cwd），所以 `DATABASE_URL` 里的相对路径在三处都统一解析成以 server 包目录为基准的绝对路径：`prisma.config.ts`、`src/config.ts`、`prisma/seed.ts`。改一处要改三处。
+- 数据模型以 `server/prisma/schema.prisma` 与 `server/prisma/schema.postgresql.prisma` 为准，API.md 里是约束摘要；修改模型时同步两份 schema、两套迁移和 API.md。
+- SQLite 与 PostgreSQL 共用相同逻辑模型。为保持行为一致，5 组取值全部存字符串；`flaggedWords` 与 `AuditLog.detail` 存 JSON 字符串；日期存 `YYYY-MM-DD` 字符串。
+- `DATABASE_PROVIDER` 为 `sqlite` 或 `postgresql`，决定 Prisma schema、迁移目录和运行时 adapter。两份 schema 修改时必须同步；SQLite 相对路径统一以 `server/` 为基准。
 - Prisma 7 的两处与旧版不同：`datasource` 块里不写 `url`（迁移路径在 `prisma.config.ts`，运行时靠 driver adapter）；生成的 client 必须指定 `output`，本项目在 `server/src/generated/prisma`，不进版本库。`prisma migrate diff` 的参数是 `--to-schema` 而不是旧的 `--to-schema-datamodel`。
 - 服务端类型检查走 `tsconfig.typecheck.json`（把 `prisma/*.ts`、`prisma.config.ts`、`scripts/*.ts` 和测试一起收进来），构建仍走 `tsconfig.json`，因为它的 `rootDir` 必须锁在 `src`，且要排掉 `*.test.ts` 不进 dist。
 - `NeteaseCloudMusicApi` 是 CJS，导出在运行时动态拼出来，cjs-module-lexer 认不出来，具名 ESM import 会在加载时报 `does not provide an export named`。只能 `createRequire` 取整个 `module.exports` 再套它自带的 `interface.d.ts` 类型，见 `sources/netease.ts` 顶部注释。它把搜索类型和音质等级声明成 `const enum`，运行时没有对应对象，传值时要按字面量断言。
@@ -166,5 +168,5 @@ YangYiSongRequest/
 
 - 三家音源都是逆向的非公开接口，随时可能变更或封禁，适配层必须保持可替换。
 - QQ 与酷狗没有会员账号，可下载音质可能不足以直接播出，这是已确认的取舍。付费歌在 QQ 只有试听片段，在酷狗一个地址都没有；网易云配上会员 Cookie 后可取完整曲。
-- SQLite 单文件的代价是备份要靠自己：升级或迁移前先拷 `server/data/app.db` 及其 `-wal`、`-shm`。
+- SQLite 升级前备份 `server/data/app.db` 及其 `-wal`、`-shm`；PostgreSQL 使用常规 `pg_dump` 与实例备份策略。
 - 站内需有一页使用声明，说明音频来源与「仅用于校内广播」的用途限制。

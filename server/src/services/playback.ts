@@ -1,6 +1,6 @@
 // 「已播出」由时间自动判定，管理员不用手点（REQUIREMENTS.md 第 5 节）。
 // 判定规则：排期日期 + 时段结束时间 已经过去，就把 SCHEDULED 翻成 PLAYED。
-// 启动时跑一次，之后每 5 分钟跑一次；SQLite 上这是个很小的 update。
+// 启动时跑一次，之后每 5 分钟跑一次；这是个很小的 update。
 import { prisma } from '../lib/db.js'
 import { shanghaiDate, shanghaiTime } from '../lib/time.js'
 

@@ -5,7 +5,7 @@
 
 ## 数据模型
 
-结构以 [server/prisma/schema.prisma](../server/prisma/schema.prisma) 为唯一准绳，本节只记录约束与意图，改 schema 时同步这里。
+结构以 SQLite 的 [schema.prisma](../server/prisma/schema.prisma) 和 PostgreSQL 的 [schema.postgresql.prisma](../server/prisma/schema.postgresql.prisma) 为准，本节只记录约束与意图。
 
 | 模型 | 作用 | 关键约束 |
 | --- | --- | --- |
@@ -29,9 +29,9 @@
 | `announcement` | 文本 | 空 | 首页公告 |
 | `maxScheduleDays` | 整数 | `14` | 最远可排多少天 |
 
-数据库是 SQLite，存不了原生 enum、数组和 Json：上面所有「取值型」字段（`source`、`grade`、`status`、`kind`、`role`）都是字符串，合法取值与中文标签的唯一来源是 `server/src/lib/domain.ts`；`flaggedWords`、`detail` 是 JSON 字符串，用同一个文件里的 encode/decode 函数处理。
+为保持 SQLite 与 PostgreSQL 行为一致，上面所有「取值型」字段（`source`、`grade`、`status`、`kind`、`role`）都是字符串，合法取值与中文标签的唯一来源是 `server/src/lib/domain.ts`；`flaggedWords`、`detail` 是 JSON 字符串，用同一个文件里的 encode/decode 函数处理。
 
-Prisma 7 的两处约定：`datasource` 块里不再写 `url`，迁移用的数据库路径来自 `server/prisma.config.ts`，运行时的来自 driver adapter（`server/src/lib/db.ts`）；生成的 client 落在 `server/src/generated/prisma`，不进版本库。
+Prisma 7 的两处约定：`datasource` 块里不写 `url`，连接信息来自 `server/prisma.config.ts` 和 driver adapter；生成的 client 落在 `server/src/generated/prisma`。`DATABASE_PROVIDER` 决定使用对应 schema、adapter 与迁移目录。
 
 ## 前台接口
 

@@ -76,6 +76,7 @@
   - 代价与处理：Prisma 的 SQLite 连接器不支持原生 enum、数组和 Json，于是 5 组取值改存字符串并把唯一来源收进 `server/src/lib/domain.ts`（联合类型 + `is*` 校验 + 标签），`flaggedWords` 与 `AuditLog.detail` 改存 JSON 字符串，日期改存 `YYYY-MM-DD` 字符串。趁迁移一次都还没跑过时改，成本最低。
   - SQLite 相对路径在 CLI 与运行时有两套解析基准，已在 `prisma.config.ts`、`src/config.ts`、`prisma/seed.ts` 三处统一解析成绝对路径，改一处要改三处。
   - 迁移与种子已真实执行：`server/data/app.db` 建好，超管 yadmin、午间档与晚间档、每年级 23 班、四个站点开关都已落库并读回验证。DEPLOY.md 重写为自托管版（systemd + Nginx + SQLite 备份）。
+- 2026-09-05 增加 PostgreSQL 可选后端。默认仍为 SQLite；通过 `DATABASE_PROVIDER=postgresql` 使用 `@prisma/adapter-pg`、独立 schema 和独立迁移目录。两种数据库保持相同字段表示，不自动迁移既有数据。
 
 - 2026-09-04 S3 音源适配层完成：统一 `MusicSource` 契约 + 三家实现 + 注册表 + 体检接口，18 个单测（mock fetch，只测归一化与音质挑选逻辑），外加 `npm run smoke:sources --workspace server` 做真实联调。实测三家的搜索、详情、试听、下载、歌词、封面全部通，具体能拿到什么音质见 CONTEXT.md 第 3 节。
   - 定稿：网易云用 `NeteaseCloudMusicApi` npm 包；QQ 与酷狗自写适配器（对应的开源项目都没发 npm 包，且它们本身是独立服务，塞进免费档实例不划算）。
@@ -90,4 +91,3 @@
   - 期间两处踩坑已写进 CONTEXT.md 第 6 节：TypeScript 需压在 6.0.3（vue-tsc 不兼容 TS 7）；组件 scoped 样式会压过 Tailwind 工具类（层叠层规则）。
   - 中文 web font 方案改为「标识走构建期 SVG 字形，其余走系统栈」，理由见 CONTEXT.md 第 4 节。
 - 2026-08-31 完成需求访谈，确定技术栈（Node/TS 单服务 + Neon Postgres）、排期粒度（日期 + 时段 + 序号）、不做跨源匹配、不缓存音频、视觉方向（校园油印点歌条），产出五份文档。
-
