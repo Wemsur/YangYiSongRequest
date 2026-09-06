@@ -14,6 +14,7 @@
     "generate": "prisma generate",
     "migrate": "prisma migrate dev",
     "migrate:deploy": "prisma migrate deploy",
+    "migrate:db": "node scripts/migrate-db.mjs",
     "seed": "prisma db seed",
     "reset-password": "tsx scripts/reset-admin-password.ts",
     "smoke:sources": "tsx scripts/smoke-sources.ts",
