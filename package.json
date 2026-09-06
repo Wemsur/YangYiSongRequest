@@ -26,6 +26,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@types/better-sqlite3": "^9.6.0",
     "concurrently": "10.0.5",
     "drizzle-kit": "^0.31.10",
     "eslint": "^10.10.0",

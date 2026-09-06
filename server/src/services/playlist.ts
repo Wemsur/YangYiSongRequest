@@ -1,8 +1,9 @@
 // 歌单：前台只看得到已排期与已播出的歌，且不含任何点歌人信息（CONTEXT.md 第 6 节）。
-import { prisma } from '../lib/db.js'
+import { db, schema } from '../lib/db.js'
 import { isRequestStatus } from '../lib/domain.js'
 import type { RequestStatus, SourceId } from '../lib/domain.js'
 import { addDays, shanghaiDate } from '../lib/time.js'
+import { and, inArray, lt, gte, eq } from 'drizzle-orm'
 
 export interface PlaylistSong {
   id: string
@@ -106,20 +107,80 @@ const ORDER = [
 
 /** 最近歌单：昨天 + 今天 + 未来所有已排期日期（REQUIREMENTS.md 第 3 节） */
 export async function readRecent(now: Date = new Date()): Promise<PlaylistDay[]> {
-  const rows = await prisma.schedule.findMany({
-    where: { playDate: { gte: addDays(shanghaiDate(now), -1) }, request: { status: { in: VISIBLE } } },
-    select: SELECT,
-    orderBy: [...ORDER],
-  })
+  const rows = await db
+    .select({
+      orderNo: schema.schedule.orderNo,
+      playDate: schema.schedule.playDate,
+      slot: {
+        id: schema.broadcastSlot.id,
+        name: schema.broadcastSlot.name,
+        startTime: schema.broadcastSlot.startTime,
+        endTime: schema.broadcastSlot.endTime,
+      },
+      request: {
+        id: schema.songRequest.id,
+        source: schema.songRequest.source,
+        platformId: schema.songRequest.platformId,
+        title: schema.songRequest.title,
+        artist: schema.songRequest.artist,
+        coverUrl: schema.songRequest.coverUrl,
+        durationMs: schema.songRequest.durationMs,
+        status: schema.songRequest.status,
+      },
+    })
+    .from(schema.schedule)
+    .innerJoin(schema.songRequest, eq(schema.schedule.requestId, schema.songRequest.id))
+    .innerJoin(schema.broadcastSlot, eq(schema.schedule.slotId, schema.broadcastSlot.id))
+    .where(
+      and(
+        gte(schema.schedule.playDate, addDays(shanghaiDate(now), -1)),
+        inArray(schema.songRequest.status, VISIBLE),
+      ),
+    )
+    .orderBy(
+      schema.schedule.playDate,
+      schema.broadcastSlot.sortOrder,
+      schema.schedule.orderNo,
+    )
   return group(rows)
 }
 
 export async function readDate(date: string): Promise<PlaylistDay> {
-  const rows = await prisma.schedule.findMany({
-    where: { playDate: date, request: { status: { in: VISIBLE } } },
-    select: SELECT,
-    orderBy: [...ORDER],
-  })
+  const rows = await db
+    .select({
+      orderNo: schema.schedule.orderNo,
+      playDate: schema.schedule.playDate,
+      slot: {
+        id: schema.broadcastSlot.id,
+        name: schema.broadcastSlot.name,
+        startTime: schema.broadcastSlot.startTime,
+        endTime: schema.broadcastSlot.endTime,
+      },
+      request: {
+        id: schema.songRequest.id,
+        source: schema.songRequest.source,
+        platformId: schema.songRequest.platformId,
+        title: schema.songRequest.title,
+        artist: schema.songRequest.artist,
+        coverUrl: schema.songRequest.coverUrl,
+        durationMs: schema.songRequest.durationMs,
+        status: schema.songRequest.status,
+      },
+    })
+    .from(schema.schedule)
+    .innerJoin(schema.songRequest, eq(schema.schedule.requestId, schema.songRequest.id))
+    .innerJoin(schema.broadcastSlot, eq(schema.schedule.slotId, schema.broadcastSlot.id))
+    .where(
+      and(
+        eq(schema.schedule.playDate, date),
+        inArray(schema.songRequest.status, VISIBLE),
+      ),
+    )
+    .orderBy(
+      schema.schedule.playDate,
+      schema.broadcastSlot.sortOrder,
+      schema.schedule.orderNo,
+    )
   return group(rows)[0] ?? { date, slots: [] }
 }
 
@@ -128,12 +189,17 @@ export async function listPastMonths(
   now: Date = new Date(),
 ): Promise<Array<{ month: string; dates: string[] }>> {
   const before = addDays(shanghaiDate(now), -1)
-  const rows = await prisma.schedule.findMany({
-    where: { playDate: { lt: before }, request: { status: { in: VISIBLE } } },
-    select: { playDate: true },
-    distinct: ['playDate'],
-    orderBy: { playDate: 'desc' },
-  })
+  const rows = await db
+    .selectDistinct({ playDate: schema.schedule.playDate })
+    .from(schema.schedule)
+    .innerJoin(schema.songRequest, eq(schema.schedule.requestId, schema.songRequest.id))
+    .where(
+      and(
+        lt(schema.schedule.playDate, before),
+        inArray(schema.songRequest.status, VISIBLE),
+      ),
+    )
+    .orderBy(schema.schedule.playDate)
 
   const months = new Map<string, string[]>()
   for (const row of rows) {
