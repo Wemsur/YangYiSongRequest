@@ -4,8 +4,8 @@
 
 ### 1. server/scripts/migrate-db.mjs
 
-**目的**: NixOS 兼容的数据库迁移脚本  
-**大小**: ~2.5 KB  
+**目的**: NixOS 兼容的数据库迁移脚本
+**大小**: ~2.5 KB
 **功能**:
 
 - 绕过 Prisma CLI 的 NixOS 兼容性问题
@@ -22,19 +22,9 @@ npm run --workspace server migrate:db
 node server/scripts/migrate-db.mjs
 ```
 
-### 2. server/MIGRATION_FIX.md
+### 2. FIX_SUMMARY.md (根目录)
 
-**目的**: Prisma/NixOS 迁移问题的完整文档  
-**包含**:
-
-- 问题详细描述和根本原因分析
-- NixOS 特定信息和解决方案
-- 集成指南
-- 参考资源
-
-### 3. FIX_SUMMARY.md (根目录)
-
-**目的**: 修复的简明总结  
+**目的**: 修复的简明总结
 **包含**:
 
 - 问题和原因简述
@@ -73,14 +63,14 @@ node server/scripts/migrate-db.mjs
 
 ### 已应用的迁移
 
-1. `20260904150150_init` - 初始表创建
-2. `20260905000000_audit_request_context` - 审计日志增强
+- `20260904150150_init` - 初始表创建
+- `20260905000000_audit_request_context` - 审计日志增强
 
 ## 测试验证
 
-✅ 所有表已成功创建  
-✅ 可以查询 Schedule 表  
-✅ 迁移脚本幂等性通过  
+✅ 所有表已成功创建
+✅ 可以查询 Schedule 表
+✅ 迁移脚本幂等性通过
 ✅ 数据库完全可操作
 
 ## 使用建议
@@ -150,7 +140,7 @@ manual SQL 执行: 20260905000000_audit_request_context
    npm --workspace server run migrate
    ```
 
-2. **在 NixOS 上** - 按照 `server/MIGRATION_FIX.md` 的说明手动应用或使用脚本
+2. **在 NixOS 上** - 手动应用或使用脚本
 
 3. **验证**
 
@@ -160,6 +150,6 @@ manual SQL 执行: 20260905000000_audit_request_context
 
 ---
 
-**修复日期**: 2025年2月  
-**状态**: ✅ 完成并验证  
+**修复日期**: 2025年2月
+**状态**: ✅ 完成并验证
 **兼容性**: SQLite 3.x, Node.js 20+, NixOS
