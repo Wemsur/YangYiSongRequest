@@ -4,6 +4,7 @@ import { Readable } from 'node:stream'
 import type { ReadableStream as WebReadableStream } from 'node:stream/web'
 import type { FastifyPluginAsync } from 'fastify'
 import { AppError, badRequest, notFound } from '../lib/errors.js'
+import { STREAM_RATE_LIMIT, SUBMIT_REQUEST_RATE_LIMIT } from '../lib/rate-limits.js'
 import { lookupByCode, submitRequest } from '../services/requests.js'
 import type { SubmitInput } from '../services/requests.js'
 import { listPastMonths, readDate, readRecent } from '../services/playlist.js'
@@ -56,7 +57,7 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
   // Range 原样转发，这样进度条能拖动；防盗链所需的 referer 由音源层给出。
   app.get<{ Params: SongParams }>(
     '/api/stream/:source/:platformId',
-    { config: { rateLimit: { max: 120, timeWindow: '1 minute' } } },
+    { config: { rateLimit: STREAM_RATE_LIMIT } },
     async (request, reply) => {
       const source = requireSource(request.params.source)
       const target = await source.streamTarget(request.params.platformId)
@@ -91,7 +92,7 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
 
   app.post<{ Body: SubmitInput }>(
     '/api/requests',
-    { config: { rateLimit: { max: 20, timeWindow: '10 minutes' } } },
+    { config: { rateLimit: SUBMIT_REQUEST_RATE_LIMIT } },
     async (request, reply) => {
       const result = await submitRequest(request.body ?? ({} as SubmitInput), request.ip)
       return reply.code(201).send(result)
@@ -113,4 +114,5 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
     }
     return readDate(request.params.date)
   })
+
 }

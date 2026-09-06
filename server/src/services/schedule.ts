@@ -20,13 +20,9 @@ export interface CapacityNote {
 
 /** 这天能不能排。行政历没标记的工作日按可播处理 */
 async function assertPlayable(playDate: string): Promise<void> {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(playDate)) throw badRequest('BAD_DATE', '日期格式不对')
   const site = await readSite()
   const today = shanghaiDate()
-  if (playDate < today) throw badRequest('DATE_PAST', '不能排到过去的日期')
-  if (playDate > addDays(today, site.maxScheduleDays)) {
-    throw badRequest('DATE_TOO_FAR', `最远只能排到 ${site.maxScheduleDays} 天后`)
-  }
+  assertScheduleDate(playDate, today, site.maxScheduleDays)
 
   const day = await prisma.calendarDay.findUnique({ where: { date: playDate } })
   if (day) {
@@ -37,6 +33,18 @@ async function assertPlayable(playDate: string): Promise<void> {
     )
   }
   if (isWeekend(playDate)) throw badRequest('DATE_WEEKEND', '周末不播')
+}
+
+export function assertScheduleDate(playDate: string, today: string, maxScheduleDays: number): void {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(playDate)) throw badRequest('BAD_DATE', '日期格式不对')
+  if (playDate < today) throw badRequest('DATE_PAST', '不能排到过去的日期')
+  if (playDate > addDays(today, maxScheduleDays)) {
+    throw badRequest('DATE_TOO_FAR', `最远只能排到 ${maxScheduleDays} 天后`)
+  }
+}
+
+export function nextOrderNo(orderNumbers: number[]): number {
+  return Math.max(0, ...orderNumbers) + 1
 }
 
 async function checkCapacity(playDate: string, slotId: string, addMs: number): Promise<CapacityNote> {
@@ -70,12 +78,11 @@ export async function scheduleRequest(
   await assertPlayable(playDate)
   const capacity = await checkCapacity(playDate, slotId, request.durationMs)
 
-  const last = await prisma.schedule.findFirst({
+  const existingOrders = await prisma.schedule.findMany({
     where: { playDate, slotId },
-    orderBy: { orderNo: 'desc' },
     select: { orderNo: true },
   })
-  const orderNo = (last?.orderNo ?? 0) + 1
+  const orderNo = nextOrderNo(existingOrders.map((row) => row.orderNo))
 
   await prisma.$transaction([
     prisma.schedule.upsert({

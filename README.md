@@ -2,11 +2,25 @@
 
 学生免登录点歌，管理员试听审核、排进播出时段，按天打包下载当天要播的音频。
 
-文档：[CONTEXT.md](CONTEXT.md) 架构与长期约定 · [REQUIREMENTS.md](REQUIREMENTS.md) 需求与验收 · [PROGRESS.md](PROGRESS.md) 进度 · [API.md](API.md) 接口 · [DEPLOY.md](DEPLOY.md) 部署
+文档：[CONTEXT.md](docs/CONTEXT.md) 架构与长期约定 · [REQUIREMENTS.md](docs/REQUIREMENTS.md) 需求与验收 · [PROGRESS.md](docs/PROGRESS.md) 进度 · [API.md](docs/API.md) API 契约 · [DEPLOY.md](docs/DEPLOY.md) 部署
 
-## 本地跑起来
+## 快速开始（推荐 Docker）
 
-需要 Node 20 以上（本机实测 24.16）。不需要 Docker，也不需要单独装数据库——数据库就是一个 SQLite 文件。
+```bash
+docker run -d --name yysong -p 3000:3000 \
+  -e DATABASE_PROVIDER=sqlite \
+  -e DATABASE_URL=file:/data/app.db \
+  -v $(pwd)/data:/data \
+  ghcr.io/wemsur/yangyisongrequest:latest
+```
+
+浏览器打开 `http://localhost:3000/admin` 即可使用管理后台。
+
+完整部署与配置见 [docs/DEPLOY.md](docs/DEPLOY.md)。
+
+## 本地开发（Node）
+
+需要 Node 20 以上（本机实测 24.16）。默认使用 SQLite，也可连接 PostgreSQL，配置见部署文档。
 
 安装依赖。这一步会顺带从 GitHub 拉酷狗上游服务，所以要有 git、并且网络能连上 GitHub：
 
@@ -36,11 +50,11 @@ npm run dev
 
 这一条会同时起三个进程：
 
-| 名字 | 是什么 | 地址 |
-| --- | --- | --- |
-| `kugou` | 酷狗上游取址服务（kugoumusicapi） | 127.0.0.1:3300 |
-| `server` | 后端 API | 127.0.0.1:3000 |
-| `web` | 前端开发服务器 | 0.0.0.0:5175 ← **浏览器开这个** |
+| 名字     | 是什么                            | 地址                            |
+| -------- | --------------------------------- | ------------------------------- |
+| `kugou`  | 酷狗上游取址服务（kugoumusicapi） | 127.0.0.1:3300                  |
+| `server` | 后端 API                          | 127.0.0.1:3000                  |
+| `web`    | 前端开发服务器                    | 0.0.0.0:5175 ← **浏览器开这个** |
 
 只想起其中一个的话：`npm run dev:web`、`npm run dev:server`、`npm run dev:kugou`。
 
@@ -58,16 +72,7 @@ npm run smoke:sources --workspace server
 
 以后台里开了会员，在管理后台配上 Cookie（S7）就能出更高音质，不用改代码。
 
-## 其他常用命令
-
-```bash
-npm test                              # 单测，不联网
-npm run typecheck                     # 前后端一起查类型
-npm run build                         # 构建前端 dist + 编译后端
-npm run studio --workspace server     # Prisma Studio，浏览器里看库
-```
-
-数据库备份就是拷 `server/data/app.db`（连同 `-wal`、`-shm` 一起）。
+SQLite 备份：拷 `server/data/app.db`（连同 `-wal`、`-shm`）；PostgreSQL 使用 `pg_dump`。Docker 部署时只需持久化数据卷。
 
 ## 管理后台
 

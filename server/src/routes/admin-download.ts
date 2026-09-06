@@ -5,6 +5,7 @@ import { requireAdmin } from '../lib/auth.js'
 import { prisma } from '../lib/db.js'
 import { badRequest } from '../lib/errors.js'
 import { contentDisposition } from '../lib/format.js'
+import { DAY_DOWNLOAD_RATE_LIMIT, SONG_DOWNLOAD_RATE_LIMIT } from '../lib/rate-limits.js'
 import { buildDayCsv, buildTrack, createDayArchive, dayZipName } from '../services/download.js'
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/
@@ -14,7 +15,7 @@ export const adminDownloadRoutes: FastifyPluginAsync = async (app) => {
 
   app.get<{ Params: { id: string } }>(
     '/api/admin/download/song/:id',
-    { config: { rateLimit: { max: 60, timeWindow: '5 minutes' } } },
+    { config: { rateLimit: SONG_DOWNLOAD_RATE_LIMIT } },
     async (request, reply) => {
       const track = await buildTrack(request.params.id)
       reply.header('content-type', 'application/octet-stream')
@@ -26,7 +27,7 @@ export const adminDownloadRoutes: FastifyPluginAsync = async (app) => {
 
   app.get<{ Params: { date: string }; Querystring: { slotId?: string } }>(
     '/api/admin/download/day/:date',
-    { config: { rateLimit: { max: 10, timeWindow: '5 minutes' } } },
+    { config: { rateLimit: DAY_DOWNLOAD_RATE_LIMIT } },
     async (request, reply) => {
       const { date } = request.params
       if (!DATE.test(date)) throw badRequest('BAD_DATE', '日期格式不对')

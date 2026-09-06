@@ -1,0 +1,5 @@
+{
+  "*.{ts,tsx,vue}": ["eslint --fix", "prettier --write"],
+  "*.md": ["markdownlint-cli2 --fix", "prettier --write"],
+  "*.{json,js,mjs,yml,yaml}": ["prettier --write"]
+}

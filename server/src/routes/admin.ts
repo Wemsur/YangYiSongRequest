@@ -12,6 +12,7 @@ import {
 import { prisma } from '../lib/db.js'
 import { decodeDetail } from '../lib/domain.js'
 import { badRequest } from '../lib/errors.js'
+import { LOGIN_RATE_LIMIT } from '../lib/rate-limits.js'
 import { writeAudit } from '../services/audit.js'
 import {
   listRequests,
@@ -39,7 +40,7 @@ interface BatchBody {
 export const adminRoutes: FastifyPluginAsync = async (app) => {
   app.post<{ Body: LoginBody }>(
     '/api/admin/login',
-    { config: { rateLimit: { max: 10, timeWindow: '10 minutes' } } },
+    { config: { rateLimit: LOGIN_RATE_LIMIT } },
     async (request, reply) => {
       const { username, password } = request.body ?? {}
       if (!username || !password) throw badRequest('MISSING_FIELDS', '账号和密码都要填')
@@ -191,6 +192,8 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
             action: row.action,
             targetId: row.targetId,
             detail: decodeDetail(row.detail),
+            ip: row.ip,
+            userAgent: row.userAgent,
             createdAt: row.createdAt.toISOString(),
           })),
         }

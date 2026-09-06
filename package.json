@@ -18,11 +18,26 @@
     "build": "npm run build --workspace web && npm run build --workspace server",
     "start:prod": "npm run start --workspace server",
     "typecheck": "npm run typecheck --workspace server && npm run typecheck --workspace web",
-    "test": "npm run test --workspace server"
+    "test": "npm run test --workspace server",
+    "lint": "npx eslint . && npx markdownlint-cli2 \"**/*.md\" --ignore \"node_modules/**\" --ignore \"dist/**\"",
+    "format": "npx prettier --write .",
+    "format:check": "npx prettier --check .",
+    "prepare": "husky"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "concurrently": "10.0.5",
-    "typescript": "6.0.3"
+    "eslint": "^10.10.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-vue": "^10.10.0",
+    "globals": "^17.12.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.5.0",
+    "markdownlint-cli2": "^0.23.2",
+    "prettier": "^3.9.6",
+    "typescript": "6.0.3",
+    "typescript-eslint": "^8.69.0",
+    "vue-eslint-parser": "^10.4.1"
   },
   "comment:overrides": "vue-tsc 3.x 仍然 require typescript/lib/tsc，而 TypeScript 7 的原生版本不再导出这个入口，所以整仓统一压在 6.0.3",
   "overrides": {
