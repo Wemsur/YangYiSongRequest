@@ -23,9 +23,9 @@ COPY --from=deps /app/node_modules ./node_modules
 # 复制构建产物
 COPY --from=builder /app/web/dist ./web/dist
 COPY --from=builder /app/server/dist ./server/dist
-COPY --from=builder /app/server/data ./server/data
 COPY server/package.json ./server/
 COPY package.json ./
+# 数据库文件在运行时创建（无需复制）
 # 非 root 用户
 RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
 USER nodejs
