@@ -12,7 +12,7 @@ FROM node:24-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-# 构建前端 + 后端（Prisma generate 在 server build 中执行）
+# 构建前端 + 后端（已迁移到 Drizzle ORM）
 RUN npm run build
 
 FROM node:20-alpine AS runner
@@ -23,8 +23,7 @@ COPY --from=deps /app/node_modules ./node_modules
 # 复制构建产物
 COPY --from=builder /app/web/dist ./web/dist
 COPY --from=builder /app/server/dist ./server/dist
-COPY --from=builder /app/server/src/generated ./server/src/generated
-COPY --from=builder /app/server/prisma ./server/prisma
+COPY --from=builder /app/server/data ./server/data
 COPY server/package.json ./server/
 COPY package.json ./
 # 非 root 用户
