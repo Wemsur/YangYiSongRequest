@@ -95,7 +95,7 @@ export async function submitRequest(input: SubmitInput, ip: string): Promise<{ q
   const song = await source.detail(input.platformId.trim())
   if (!song) throw notFound('SONG_NOT_FOUND', '这首歌查不到了，换一首试试')
 
-   const since = shanghaiDayStart()
+  const since = Math.floor(shanghaiDayStart().getTime() / 1000)
    const ipCountResult = await (db as any)
      .select({ count: count() })
      .from(songRequest)

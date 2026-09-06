@@ -518,7 +518,7 @@ export async function readAdminDay(date: string): Promise<
     (db as any)
       .select()
       .from(broadcastSlot)
-      .where(eq(broadcastSlot.enabled, true))
+      .where(eq(broadcastSlot.enabled, 1))
       .orderBy(asc(broadcastSlot.sortOrder), asc(broadcastSlot.startTime)),
 
     (db as any)
