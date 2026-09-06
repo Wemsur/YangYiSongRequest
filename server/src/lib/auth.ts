@@ -1,12 +1,17 @@
 // 管理端鉴权：argon2 校验密码，JWT 放在 httpOnly cookie 里。
 // 分权只有两级：SUPER 能改配置和账号，REVIEWER 只能审核排期下载（REQUIREMENTS.md 第 0 节）。
 import { verify } from '@node-rs/argon2';
+import { eq } from 'drizzle-orm';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { config } from '../config.js';
-import { prisma } from './db.js';
+import { db } from './db.js';
+import { adminUser } from '../drizzle/schema-sqlite.js';
 import { isAdminRole } from './domain.js';
 import type { AdminRole } from './domain.js';
 import { AppError, forbidden } from './errors.js';
+
+// 类型转换辅助函数，用于处理跨数据库的类型兼容性
+const withDb = (db: any) => db;
 
 export const SESSION_COOKIE = 'yy_admin';
 
@@ -29,7 +34,13 @@ export function assertAuthConfigured(): void {
 }
 
 export async function checkPassword(username: string, password: string): Promise<SessionUser> {
-  const user = await prisma.adminUser.findUnique({ where: { username: username.trim() } });
+  // CONVERSION #1: prisma.adminUser.findUnique -> select().from().where().limit(1)
+  const users = await withDb(db)
+    .select()
+    .from(adminUser)
+    .where(eq(adminUser.username, username.trim()));
+  const user = users[0];
+
   // 找不到账号也走一次 verify，避免用响应快慢猜出用户名是否存在
   const hash =
     user?.passwordHash ??
@@ -38,7 +49,13 @@ export async function checkPassword(username: string, password: string): Promise
   if (!user || !ok || user.disabled) {
     throw new AppError('BAD_CREDENTIALS', 401, '账号或密码不对');
   }
-  await prisma.adminUser.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+
+  // CONVERSION #2: prisma.adminUser.update -> db.update().set().where()
+  await withDb(db)
+    .update(adminUser)
+    .set({ lastLoginAt: new Date() })
+    .where(eq(adminUser.id, user.id));
+
   return {
     id: user.id,
     username: user.username,
@@ -74,7 +91,14 @@ async function currentUser(request: FastifyRequest): Promise<SessionUser | null>
   } catch {
     return null;
   }
-  const user = await prisma.adminUser.findUnique({ where: { id: payload.sub } });
+
+  // CONVERSION #3: prisma.adminUser.findUnique -> select().from().where().limit(1)
+  const users = await withDb(db)
+    .select()
+    .from(adminUser)
+    .where(eq(adminUser.id, payload.sub));
+  const user = users[0];
+
   if (!user || user.disabled) return null;
   return {
     id: user.id,

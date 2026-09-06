@@ -1,6 +1,7 @@
 // 音源凭据：Cookie 加密存库，读的时候带 30 秒缓存，免得每次取址都解一遍密。
 // 适配层通过注入的 CookieProvider 拿 Cookie，自己不碰数据库（CONTEXT.md 第 3 节）。
-import { prisma } from '../lib/db.js'
+import { eq } from 'drizzle-orm'
+import { db, schema } from '../lib/db.js'
 import { decryptSecret, encryptSecret, hasCredentialKey } from '../lib/crypto.js'
 import { SOURCES } from '../lib/domain.js'
 import type { SourceId } from '../lib/domain.js'
@@ -19,7 +20,8 @@ export async function readCookie(source: SourceId): Promise<string | null> {
   if (hit && Date.now() - hit.at < TTL_MS) return hit.cookie
 
   let cookie: string | null = null
-  const row = await prisma.sourceCredential.findUnique({ where: { source } })
+  const rows = await db.select().from(schema.sourceCredential).where(eq(schema.sourceCredential.source, source))
+  const row = rows[0]
   if (row?.encryptedData) {
     try {
       cookie = decryptSecret(row.encryptedData)
@@ -36,22 +38,27 @@ export async function saveCookie(source: SourceId, cookie: string, note?: string
   const trimmed = cookie.trim()
   if (!trimmed) throw new Error('Cookie 是空的')
   const encryptedData = encryptSecret(trimmed)
-  await prisma.sourceCredential.upsert({
-    where: { source },
-    update: { encryptedData, note: note ?? null, lastCheckAt: null, lastCheckOk: null },
-    create: { source, encryptedData, note: note ?? null },
-  })
+  
+  const existing = await db.select().from(schema.sourceCredential).where(eq(schema.sourceCredential.source, source))
+  if (existing.length > 0) {
+    await db.update(schema.sourceCredential)
+      .set({ encryptedData, note: note ?? null, lastCheckAt: null, lastCheckOk: null })
+      .where(eq(schema.sourceCredential.source, source))
+  } else {
+    await db.insert(schema.sourceCredential).values({ source, encryptedData, note: note ?? null })
+  }
   invalidateCredentialCache(source)
 }
 
 export async function clearCookie(source: SourceId): Promise<void> {
-  await prisma.sourceCredential.deleteMany({ where: { source } })
+  await db.delete(schema.sourceCredential).where(eq(schema.sourceCredential.source, source))
   invalidateCredentialCache(source)
 }
 
 export async function recordCheck(source: SourceId, ok: boolean): Promise<void> {
-  await prisma.sourceCredential
-    .update({ where: { source }, data: { lastCheckAt: new Date(), lastCheckOk: ok } })
+  await db.update(schema.sourceCredential)
+    .set({ lastCheckAt: new Date(), lastCheckOk: ok })
+    .where(eq(schema.sourceCredential.source, source))
     .catch(() => undefined)
 }
 
@@ -65,16 +72,16 @@ export interface CredentialView {
 }
 
 export async function listCredentials(): Promise<{ keyConfigured: boolean; items: CredentialView[] }> {
-  const rows = await prisma.sourceCredential.findMany()
+  const rows = await db.select().from(schema.sourceCredential)
   return {
     keyConfigured: hasCredentialKey(),
     items: SOURCES.map((source) => {
-      const row = rows.find((item) => item.source === source)
+      const row = rows.find((item: any) => item.source === source)
       return {
         source,
         hasCookie: !!row?.encryptedData,
-        updatedAt: row?.updatedAt.toISOString() ?? null,
-        lastCheckAt: row?.lastCheckAt?.toISOString() ?? null,
+        updatedAt: row?.updatedAt instanceof Date ? row.updatedAt.toISOString() : row?.updatedAt ?? null,
+        lastCheckAt: row?.lastCheckAt instanceof Date ? row.lastCheckAt.toISOString() : row?.lastCheckAt ?? null,
         lastCheckOk: row?.lastCheckOk ?? null,
         note: row?.note ?? null,
       }

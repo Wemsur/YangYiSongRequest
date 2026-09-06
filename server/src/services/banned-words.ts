@@ -1,6 +1,6 @@
 // 敏感词：命中不拦提交，只在后台标记出来交人工判断（见 REQUIREMENTS.md 第 2 节）。
 // 词表变动不频繁，缓存 60 秒；后台增删词时调 invalidateBannedWords()。
-import { prisma } from '../lib/db.js'
+import { db, schema } from '../lib/db.js'
 
 const TTL_MS = 60_000
 let cache: { at: number; words: string[] } | null = null
@@ -11,8 +11,8 @@ export function invalidateBannedWords(): void {
 
 async function words(): Promise<string[]> {
   if (cache && Date.now() - cache.at < TTL_MS) return cache.words
-  const rows = await prisma.bannedWord.findMany({ select: { word: true } })
-  const list = rows.map((row) => row.word.trim().toLowerCase()).filter(Boolean)
+  const rows = await db.select({ word: schema.bannedWord.word }).from(schema.bannedWord)
+  const list = rows.map((row: any) => row.word.trim().toLowerCase()).filter(Boolean)
   cache = { at: Date.now(), words: list }
   return list
 }

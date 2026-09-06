@@ -1,5 +1,6 @@
 // 管理端接口。/api/admin/* 一律要登录，改配置与看日志要超管（REQUIREMENTS.md 第 0 节）。
 import { hash } from '@node-rs/argon2'
+import { and, desc, eq } from 'drizzle-orm'
 import type { FastifyPluginAsync } from 'fastify'
 import {
   checkPassword,
@@ -9,7 +10,7 @@ import {
   requireAdmin,
   requireSuper,
 } from '../lib/auth.js'
-import { prisma } from '../lib/db.js'
+import { db, schema } from '../lib/db.js'
 import { decodeDetail } from '../lib/domain.js'
 import { badRequest } from '../lib/errors.js'
 import { LOGIN_RATE_LIMIT } from '../lib/rate-limits.js'
@@ -74,10 +75,13 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         if (!me || !current || !next) throw badRequest('MISSING_FIELDS', '两个密码都要填')
         if (next.length < 8) throw badRequest('WEAK_PASSWORD', '新密码至少 8 位')
         await checkPassword(me.username, current)
-        await prisma.adminUser.update({
-          where: { id: me.id },
-          data: { passwordHash: await hash(next), mustChangePassword: false },
-        })
+        
+        // CONVERSION #1: prisma.adminUser.update -> db.update().set().where()
+        await (db as any)
+          .update(schema.adminUser)
+          .set({ passwordHash: await hash(next), mustChangePassword: false })
+          .where(eq(schema.adminUser.id, me.id))
+        
         await writeAudit(me.id, 'password.change', me.id)
         return { ok: true }
       },
@@ -174,27 +178,53 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       async (request) => {
         const page = Math.max(1, Number(request.query.page ?? 1) || 1)
         const take = 50
-        const [total, rows] = await Promise.all([
-          prisma.auditLog.count(),
-          prisma.auditLog.findMany({
-            include: { actor: { select: { username: true } } },
-            orderBy: { createdAt: 'desc' },
-            skip: (page - 1) * take,
-            take,
-          }),
-        ])
+        
+        // CONVERSION #2-3: prisma.auditLog.count() and findMany()
+        // 获取总数
+        const countResult = await (db as any).select().from(schema.auditLog)
+        const total = countResult.length
+        
+        // 获取分页数据，使用 leftJoin 获取关联的用户名
+        const rows = await (db as any)
+          .select({
+            id: schema.auditLog.id,
+            action: schema.auditLog.action,
+            targetId: schema.auditLog.targetId,
+            detail: schema.auditLog.detail,
+            ip: schema.auditLog.ip,
+            userAgent: schema.auditLog.userAgent,
+            createdAt: schema.auditLog.createdAt,
+            actorUsername: schema.adminUser.username,
+          })
+          .from(schema.auditLog)
+          .leftJoin(schema.adminUser, eq(schema.auditLog.actorId, schema.adminUser.id))
+          .orderBy(desc(schema.auditLog.createdAt))
+          .limit(take)
+          .offset((page - 1) * take) as Array<{
+            id: string
+            action: string
+            targetId: string | null
+            detail: string | null
+            ip: string | null
+            userAgent: string | null
+            createdAt: Date | number
+            actorUsername: string | null
+          }>
+        
         return {
           total,
           page,
           items: rows.map((row) => ({
             id: row.id,
-            actor: row.actor?.username ?? '(已删除)',
+            actor: row.actorUsername ?? '(已删除)',
             action: row.action,
             targetId: row.targetId,
             detail: decodeDetail(row.detail),
             ip: row.ip,
             userAgent: row.userAgent,
-            createdAt: row.createdAt.toISOString(),
+            createdAt: row.createdAt instanceof Date 
+              ? row.createdAt.toISOString() 
+              : new Date(row.createdAt).toISOString(),
           })),
         }
       },

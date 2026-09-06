@@ -28,6 +28,7 @@ function requireSource(id: string) {
 }
 
 export const publicRoutes: FastifyPluginAsync = async (app) => {
+  // Drizzle ORM 迁移：此文件为纯接口层，不涉及数据库操作，无需转换。
   app.get('/api/site', async () => readSite())
 
   app.get<{ Querystring: { q?: string; source?: string; page?: string } }>(

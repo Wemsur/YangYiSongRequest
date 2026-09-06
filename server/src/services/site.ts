@@ -1,6 +1,7 @@
 // 站点配置：SiteSetting 是键值表，这里把它读成有类型的对象，并带 30 秒缓存。
 // 后台改配置时调 invalidateSiteCache()，不用等缓存过期。
-import { prisma } from '../lib/db.js'
+import { asc, eq } from 'drizzle-orm'
+import { db, schema } from '../lib/db.js'
 import { decodeBool, decodeInt, GRADES } from '../lib/domain.js'
 import type { Grade } from '../lib/domain.js'
 
@@ -44,17 +45,17 @@ export function invalidateSiteCache(): void {
 
 async function load(): Promise<SiteSnapshot> {
   const [rows, slots, grades] = await Promise.all([
-    prisma.siteSetting.findMany(),
-    prisma.broadcastSlot.findMany({
-      where: { enabled: true },
-      orderBy: [{ sortOrder: 'asc' }, { startTime: 'asc' }],
-    }),
-    prisma.gradeConfig.findMany(),
+    db.select().from(schema.siteSetting),
+    db.select()
+      .from(schema.broadcastSlot)
+      .where(eq(schema.broadcastSlot.enabled, true))
+      .orderBy(asc(schema.broadcastSlot.sortOrder), asc(schema.broadcastSlot.startTime)),
+    db.select().from(schema.gradeConfig),
   ])
 
-  const map = new Map(rows.map((row) => [row.key, row.value]))
+  const map = new Map((rows as any[]).map((row) => [row.key, row.value]))
   const classCounts = Object.fromEntries(
-    GRADES.map((grade) => [grade, grades.find((row) => row.grade === grade)?.classCount ?? 23]),
+    GRADES.map((grade) => [grade, (grades as any[]).find((row) => row.grade === grade)?.classCount ?? 23]),
   ) as Record<Grade, number>
 
   return {
@@ -62,7 +63,7 @@ async function load(): Promise<SiteSnapshot> {
     requireIdentity: decodeBool(map.get('requireIdentity'), DEFAULTS.requireIdentity),
     announcement: map.get('announcement') ?? DEFAULTS.announcement,
     maxScheduleDays: decodeInt(map.get('maxScheduleDays'), DEFAULTS.maxScheduleDays),
-    slots: slots.map((slot) => ({
+    slots: (slots as any[]).map((slot) => ({
       id: slot.id,
       name: slot.name,
       startTime: slot.startTime,

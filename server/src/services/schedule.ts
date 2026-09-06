@@ -3,7 +3,12 @@
 //   - 最远 maxScheduleDays 天，不能排到过去
 //   - 时段容量超了只提示、不硬拦，最终由管理员判断
 // 排期一律追加到末尾，顺序调整走 reorder，这样就不会撞 (playDate, slotId, orderNo) 的唯一约束。
-import { prisma } from '../lib/db.js'
+import { and, asc, count, desc, eq, isNull } from 'drizzle-orm'
+import type { Database as SQLiteDatabase } from 'better-sqlite3'
+import type { Pool } from 'pg'
+
+import { db } from '../lib/db.js'
+import { schedule, songRequest, broadcastSlot, calendarDay } from '../drizzle/schema-sqlite.js'
 import { decodeWordList, encodeWordList, isRequestStatus } from '../lib/domain.js'
 import type { RequestStatus, SourceId } from '../lib/domain.js'
 import { badRequest, notFound } from '../lib/errors.js'
@@ -24,7 +29,14 @@ async function assertPlayable(playDate: string): Promise<void> {
   const today = shanghaiDate()
   assertScheduleDate(playDate, today, site.maxScheduleDays)
 
-  const day = await prisma.calendarDay.findUnique({ where: { date: playDate } })
+  // CONVERSION #1: findUnique -> select().from().where().limit(1)
+  const days = await (db as any)
+    .select()
+    .from(calendarDay)
+    .where(eq(calendarDay.date, playDate))
+    .limit(1)
+  const day = days[0]
+
   if (day) {
     if (day.kind === 'SCHOOL') return
     throw badRequest(
@@ -48,18 +60,30 @@ export function nextOrderNo(orderNumbers: number[]): number {
 }
 
 async function checkCapacity(playDate: string, slotId: string, addMs: number): Promise<CapacityNote> {
-  const slot = await prisma.broadcastSlot.findUnique({ where: { id: slotId } })
+  // CONVERSION #2: findUnique for broadcastSlot
+  const slots = await (db as any)
+    .select()
+    .from(broadcastSlot)
+    .where(eq(broadcastSlot.id, slotId))
+    .limit(1)
+  const slot = slots[0]
+
   if (!slot || !slot.enabled) throw badRequest('BAD_SLOT', '时段不对或已停用')
 
-  const existing = await prisma.schedule.findMany({
-    where: { playDate, slotId },
-    select: { request: { select: { durationMs: true } } },
-  })
+  // CONVERSION #3: findMany with select -> select specific columns with join
+  const existing = await (db as any)
+    .select({
+      durationMs: songRequest.durationMs,
+    })
+    .from(schedule)
+    .innerJoin(songRequest, eq(schedule.requestId, songRequest.id))
+    .where(and(eq(schedule.playDate, playDate), eq(schedule.slotId, slotId)))
+
   const notes: string[] = []
   if (slot.maxCount && existing.length + 1 > slot.maxCount) {
     notes.push(`超过「${slot.name}」${slot.maxCount} 首的上限`)
   }
-  const totalMs = existing.reduce((sum, row) => sum + row.request.durationMs, 0) + addMs
+  const totalMs = existing.reduce((sum: number, row: any) => sum + row.durationMs, 0) + addMs
   if (slot.maxMs && totalMs > slot.maxMs) notes.push(`超过「${slot.name}」的总时长上限`)
   return { over: notes.length > 0, message: notes.join('；') || null }
 }
@@ -71,35 +95,65 @@ export async function scheduleRequest(
   playDate: string,
   slotId: string,
 ): Promise<{ orderNo: number; capacity: CapacityNote }> {
-  const request = await prisma.songRequest.findUnique({ where: { id: requestId } })
+  // CONVERSION #4: findUnique -> select().where().limit(1)
+  const requests = await (db as any)
+    .select()
+    .from(songRequest)
+    .where(eq(songRequest.id, requestId))
+    .limit(1)
+  const request = requests[0]
+
   if (!request) throw notFound('REQUEST_NOT_FOUND', '这条点歌不存在')
   if (request.status === 'REJECTED') throw badRequest('ALREADY_REJECTED', '这条已经驳回了')
 
   await assertPlayable(playDate)
   const capacity = await checkCapacity(playDate, slotId, request.durationMs)
 
-  const existingOrders = await prisma.schedule.findMany({
-    where: { playDate, slotId },
-    select: { orderNo: true },
-  })
-  const orderNo = nextOrderNo(existingOrders.map((row) => row.orderNo))
+  // CONVERSION #5: findMany with select for orderNo
+  const existingOrders = await (db as any)
+    .select({ orderNo: schedule.orderNo })
+    .from(schedule)
+    .where(and(eq(schedule.playDate, playDate), eq(schedule.slotId, slotId)))
+  const orderNo = nextOrderNo(existingOrders.map((row: any) => row.orderNo))
 
-  await prisma.$transaction([
-    prisma.schedule.upsert({
-      where: { requestId },
-      update: { playDate, slotId, orderNo },
-      create: { requestId, playDate, slotId, orderNo },
-    }),
-    prisma.songRequest.update({
-      where: { id: requestId },
-      data: {
+  // CONVERSION #6: $transaction with upsert/update -> db.transaction()
+  await (db as any).transaction(async (tx: any) => {
+    // Check if schedule exists for this request
+    const existing = await tx
+      .select()
+      .from(schedule)
+      .where(eq(schedule.requestId, requestId))
+      .limit(1)
+
+    if (existing.length > 0) {
+      // Update existing schedule
+      await tx
+        .update(schedule)
+        .set({ playDate, slotId, orderNo })
+        .where(eq(schedule.requestId, requestId))
+    } else {
+      // Create new schedule
+      const scheduleId = `sch_${Math.random().toString(36).slice(2, 11)}`
+      await tx.insert(schedule).values({
+        id: scheduleId,
+        requestId,
+        playDate,
+        slotId,
+        orderNo,
+      })
+    }
+
+    // Update songRequest status
+    await tx
+      .update(songRequest)
+      .set({
         status: 'SCHEDULED',
         rejectReason: null,
         reviewedAt: new Date(),
         reviewedById: actorId,
-      },
-    }),
-  ])
+      })
+      .where(eq(songRequest.id, requestId))
+  })
 
   await writeAudit(actorId, 'request.schedule', requestId, { playDate, slotId, orderNo })
   return { orderNo, capacity }
@@ -112,33 +166,51 @@ export async function rejectRequest(
 ): Promise<void> {
   const trimmed = reason.trim()
   if (trimmed.length < 2) throw badRequest('REASON_REQUIRED', '驳回要写个理由')
-  const request = await prisma.songRequest.findUnique({ where: { id: requestId } })
+
+  // CONVERSION #7: findUnique -> select().where().limit(1)
+  const requests = await (db as any)
+    .select()
+    .from(songRequest)
+    .where(eq(songRequest.id, requestId))
+    .limit(1)
+  const request = requests[0]
+
   if (!request) throw notFound('REQUEST_NOT_FOUND', '这条点歌不存在')
 
-  await prisma.$transaction([
-    prisma.schedule.deleteMany({ where: { requestId } }),
-    prisma.songRequest.update({
-      where: { id: requestId },
-      data: {
+  // CONVERSION #8: $transaction with deleteMany/update -> db.transaction()
+  await (db as any).transaction(async (tx: any) => {
+    // Delete all schedule entries for this request
+    await tx.delete(schedule).where(eq(schedule.requestId, requestId))
+
+    // Update songRequest status
+    await tx
+      .update(songRequest)
+      .set({
         status: 'REJECTED',
         rejectReason: trimmed,
         reviewedAt: new Date(),
         reviewedById: actorId,
-      },
-    }),
-  ])
+      })
+      .where(eq(songRequest.id, requestId))
+  })
+
   await writeAudit(actorId, 'request.reject', requestId, { reason: trimmed })
 }
 
 /** 撤下排期，回到待审核 */
 export async function unschedule(actorId: string, requestId: string): Promise<void> {
-  await prisma.$transaction([
-    prisma.schedule.deleteMany({ where: { requestId } }),
-    prisma.songRequest.update({
-      where: { id: requestId },
-      data: { status: 'PENDING', reviewedAt: null, reviewedById: null },
-    }),
-  ])
+  // CONVERSION #9: $transaction with deleteMany/update -> db.transaction()
+  await (db as any).transaction(async (tx: any) => {
+    // Delete all schedule entries for this request
+    await tx.delete(schedule).where(eq(schedule.requestId, requestId))
+
+    // Update songRequest status back to PENDING
+    await tx
+      .update(songRequest)
+      .set({ status: 'PENDING', reviewedAt: null, reviewedById: null })
+      .where(eq(songRequest.id, requestId))
+  })
+
   await writeAudit(actorId, 'schedule.remove', requestId)
 }
 
@@ -152,11 +224,13 @@ export async function reorderSlot(
   slotId: string,
   orderedRequestIds: string[],
 ): Promise<void> {
-  const rows = await prisma.schedule.findMany({
-    where: { playDate, slotId },
-    select: { id: true, requestId: true },
-  })
-  const byRequest = new Map(rows.map((row) => [row.requestId, row.id]))
+  // CONVERSION #10: findMany with select -> select specific columns
+  const rows = await (db as any)
+    .select({ id: schedule.id, requestId: schedule.requestId })
+    .from(schedule)
+    .where(and(eq(schedule.playDate, playDate), eq(schedule.slotId, slotId)))
+
+  const byRequest = new Map(rows.map((row: any) => [row.requestId, row.id]))
   if (
     orderedRequestIds.length !== rows.length ||
     orderedRequestIds.some((id) => !byRequest.has(id))
@@ -164,20 +238,30 @@ export async function reorderSlot(
     throw badRequest('BAD_ORDER', '排序列表和这个时段里的歌对不上，刷新一下再试')
   }
 
-  await prisma.$transaction(async (tx) => {
+  // CONVERSION #11: $transaction callback with multiple updates
+  await (db as any).transaction(async (tx: any) => {
+    // Step 1: Set all orderNo to negative temporarily to avoid unique constraint
     for (const [index, requestId] of orderedRequestIds.entries()) {
-      await tx.schedule.update({
-        where: { id: byRequest.get(requestId) },
-        data: { orderNo: -(index + 1) },
-      })
+      const scheduleId = byRequest.get(requestId)
+      if (scheduleId) {
+        await (tx as any)
+          .update(schedule)
+          .set({ orderNo: -(index + 1) })
+          .where((eq as any)(schedule.id, scheduleId))
+      }
     }
+    // Step 2: Set orderNo to final positive values
     for (const [index, requestId] of orderedRequestIds.entries()) {
-      await tx.schedule.update({
-        where: { id: byRequest.get(requestId) },
-        data: { orderNo: index + 1 },
-      })
+      const scheduleId = byRequest.get(requestId)
+      if (scheduleId) {
+        await (tx as any)
+          .update(schedule)
+          .set({ orderNo: index + 1 })
+          .where((eq as any)(schedule.id, scheduleId))
+      }
     }
   })
+
   await writeAudit(actorId, 'schedule.reorder', null, { playDate, slotId, orderedRequestIds })
 }
 
@@ -192,8 +276,12 @@ export async function manualAdd(
   if (!song) throw notFound('SONG_NOT_FOUND', '这首歌查不到了')
 
   const flagged = await findBannedHits(song.title, song.artist)
-  const created = await prisma.songRequest.create({
-    data: {
+
+  // CONVERSION #12: create with select -> insert().values().returning()
+  const created = await (db as any)
+    .insert(songRequest)
+    .values({
+      id: `req_${Math.random().toString(36).slice(2, 11)}`,
       queryCode: `M${Math.random().toString(36).slice(2, 7).toUpperCase()}`,
       source: song.source,
       platformId: song.platformId,
@@ -205,15 +293,16 @@ export async function manualAdd(
       flaggedWords: encodeWordList(flagged),
       isManual: true,
       submitIp: 'admin',
-    },
-    select: { id: true, queryCode: true },
-  })
+    })
+    .returning({ id: songRequest.id, queryCode: songRequest.queryCode })
 
-  await writeAudit(actorId, 'request.manual', created.id, { source: song.source, title: song.title })
+  const result = created[0]
+
+  await writeAudit(actorId, 'request.manual', result.id, { source: song.source, title: song.title })
   if (input.playDate && input.slotId) {
-    await scheduleRequest(actorId, created.id, input.playDate, input.slotId)
+    await scheduleRequest(actorId, result.id, input.playDate, input.slotId)
   }
-  return created
+  return result
 }
 
 export interface AdminRequestView {
@@ -295,21 +384,121 @@ export async function listRequests(filter: {
 }): Promise<{ total: number; page: number; items: AdminRequestView[] }> {
   const page = Math.max(1, filter.page ?? 1)
   const take = 30
-  const where = {
-    ...(isRequestStatus(filter.status) ? { status: filter.status } : {}),
-    ...(filter.date ? { schedule: { playDate: filter.date } } : {}),
-  }
-  const [total, rows] = await Promise.all([
-    prisma.songRequest.count({ where }),
-    prisma.songRequest.findMany({
-      where,
-      include: { schedule: { include: { slot: { select: { name: true } } } } },
-      orderBy: { createdAt: 'desc' },
-      skip: (page - 1) * take,
-      take,
-    }),
+
+  // CONVERSION #13: count() with where + findMany with include and complex conditions
+  // Using left joins to handle optional schedule and slot relationships
+  const [countResult, rows] = await Promise.all([
+    (async () => {
+      // Count: use different approach based on whether date filter is present
+      if (filter.date) {
+        const result = await (db as any)
+          .select({ count: count() })
+          .from(songRequest)
+          .innerJoin(schedule, eq(songRequest.id, schedule.requestId))
+          .where(eq(schedule.playDate, filter.date))
+
+        return [{ count: result[0]?.count ?? 0 }]
+      } else {
+        // No date filter, just count songRequests with optional status filter
+        let whereClause
+        if (isRequestStatus(filter.status)) {
+          whereClause = eq(songRequest.status, filter.status)
+        }
+        const result = await (db as any)
+          .select({ count: count() })
+          .from(songRequest)
+          .where(whereClause)
+
+        return [{ count: result[0]?.count ?? 0 }]
+      }
+    })(),
+
+    // Retrieve paginated results with relationships
+    (async () => {
+      let query = (db as any)
+        .select({
+          id: songRequest.id,
+          status: songRequest.status,
+          source: songRequest.source,
+          platformId: songRequest.platformId,
+          title: songRequest.title,
+          artist: songRequest.artist,
+          album: songRequest.album,
+          coverUrl: songRequest.coverUrl,
+          durationMs: songRequest.durationMs,
+          grade: songRequest.grade,
+          classNo: songRequest.classNo,
+          requesterName: songRequest.requesterName,
+          flaggedWords: songRequest.flaggedWords,
+          isManual: songRequest.isManual,
+          rejectReason: songRequest.rejectReason,
+          createdAt: songRequest.createdAt,
+          scheduleId: schedule.id,
+          schedulePlayDate: schedule.playDate,
+          scheduleSlotId: schedule.slotId,
+          scheduleOrderNo: schedule.orderNo,
+          slotName: broadcastSlot.name,
+        })
+        .from(songRequest)
+        .leftJoin(schedule, eq(songRequest.id, schedule.requestId))
+        .leftJoin(broadcastSlot, eq(schedule.slotId, broadcastSlot.id))
+
+      // Apply filters
+      const whereConditions: any[] = []
+      if (filter.date) {
+        whereConditions.push(eq(schedule.playDate, filter.date))
+      } else if (isRequestStatus(filter.status)) {
+        whereConditions.push(eq(songRequest.status, filter.status))
+      }
+
+      if (whereConditions.length > 0) {
+        query = query.where(and(...whereConditions))
+      }
+
+      return await query
+        .orderBy(desc(songRequest.createdAt))
+        .limit(take)
+        .offset((page - 1) * take)
+    })(),
   ])
-  return { total, page, items: rows.map(toAdminView) }
+
+  // Transform rows back to AdminRequestView format
+  const items = rows.map((row: any) => {
+    // Reconstruct the nested structure
+    const scheduleData = row.scheduleId
+      ? {
+          playDate: row.schedulePlayDate,
+          slotId: row.scheduleSlotId,
+          orderNo: row.scheduleOrderNo,
+          slot: { name: row.slotName },
+        }
+      : null
+
+    return toAdminView({
+      id: row.id,
+      status: row.status,
+      source: row.source,
+      platformId: row.platformId,
+      title: row.title,
+      artist: row.artist,
+      album: row.album,
+      coverUrl: row.coverUrl,
+      durationMs: row.durationMs,
+      grade: row.grade,
+      classNo: row.classNo,
+      requesterName: row.requesterName,
+      flaggedWords: row.flaggedWords,
+      isManual: row.isManual,
+      rejectReason: row.rejectReason,
+      createdAt: row.createdAt,
+      schedule: scheduleData,
+    })
+  })
+
+  // Extract count from result
+  const total = countResult[0]?.count ?? 0
+
+  return { total, page, items }
 }
 
 /** 某一天的排期总览，管理端排期页用；带点歌人信息 */
@@ -324,27 +513,81 @@ export async function readAdminDay(date: string): Promise<
     songs: AdminRequestView[]
   }>
 > {
+  // CONVERSION #14: findMany with orderBy (multiple fields) and include
   const [slots, rows] = await Promise.all([
-    prisma.broadcastSlot.findMany({
-      where: { enabled: true },
-      orderBy: [{ sortOrder: 'asc' }, { startTime: 'asc' }],
-    }),
-    prisma.songRequest.findMany({
-      where: { schedule: { playDate: date } },
-      include: { schedule: { include: { slot: { select: { name: true } } } } },
-      orderBy: { schedule: { orderNo: 'asc' } },
-    }),
+    (db as any)
+      .select()
+      .from(broadcastSlot)
+      .where(eq(broadcastSlot.enabled, true))
+      .orderBy(asc(broadcastSlot.sortOrder), asc(broadcastSlot.startTime)),
+
+    (db as any)
+      .select({
+        id: songRequest.id,
+        status: songRequest.status,
+        source: songRequest.source,
+        platformId: songRequest.platformId,
+        title: songRequest.title,
+        artist: songRequest.artist,
+        album: songRequest.album,
+        coverUrl: songRequest.coverUrl,
+        durationMs: songRequest.durationMs,
+        grade: songRequest.grade,
+        classNo: songRequest.classNo,
+        requesterName: songRequest.requesterName,
+        flaggedWords: songRequest.flaggedWords,
+        isManual: songRequest.isManual,
+        rejectReason: songRequest.rejectReason,
+        createdAt: songRequest.createdAt,
+        schedulePlayDate: schedule.playDate,
+        scheduleSlotId: schedule.slotId,
+        scheduleOrderNo: schedule.orderNo,
+        slotName: broadcastSlot.name,
+      })
+      .from(songRequest)
+      .innerJoin(schedule, eq(songRequest.id, schedule.requestId))
+      .innerJoin(broadcastSlot, eq(schedule.slotId, broadcastSlot.id))
+      .where(eq(schedule.playDate, date))
+      .orderBy(asc(schedule.orderNo)),
   ])
 
-  return slots.map((slot) => {
-    const songs = rows.filter((row) => row.schedule?.slotId === slot.id).map(toAdminView)
+  return slots.map((slot: any) => {
+    const songs = rows
+      .filter((row: any) => row.scheduleSlotId === slot.id)
+      .map((row: any) =>
+        toAdminView({
+          id: row.id,
+          status: row.status,
+          source: row.source,
+          platformId: row.platformId,
+          title: row.title,
+          artist: row.artist,
+          album: row.album,
+          coverUrl: row.coverUrl,
+          durationMs: row.durationMs,
+          grade: row.grade,
+          classNo: row.classNo,
+          requesterName: row.requesterName,
+          flaggedWords: row.flaggedWords,
+          isManual: row.isManual,
+          rejectReason: row.rejectReason,
+          createdAt: row.createdAt,
+          schedule: {
+            playDate: row.schedulePlayDate,
+            slotId: row.scheduleSlotId,
+            orderNo: row.scheduleOrderNo,
+            slot: { name: row.slotName },
+          },
+        }),
+      )
+
     return {
       slotId: slot.id,
       slotName: slot.name,
       startTime: slot.startTime,
       endTime: slot.endTime,
       maxCount: slot.maxCount,
-      totalMs: songs.reduce((sum, song) => sum + song.durationMs, 0),
+      totalMs: songs.reduce((sum: number, song: AdminRequestView) => sum + song.durationMs, 0),
       songs,
     }
   })

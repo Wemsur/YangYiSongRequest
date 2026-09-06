@@ -1,8 +1,9 @@
 // 下载类接口单独一个插件：它们回的是文件流，和 JSON 接口的错误处理路径不太一样。
 // 都要登录（审核员也能下载，见 REQUIREMENTS.md 第 0 节）。
 import type { FastifyPluginAsync } from 'fastify'
+import { eq } from 'drizzle-orm'
 import { requireAdmin } from '../lib/auth.js'
-import { prisma } from '../lib/db.js'
+import { db, schema } from '../lib/db.js'
 import { badRequest } from '../lib/errors.js'
 import { contentDisposition } from '../lib/format.js'
 import { DAY_DOWNLOAD_RATE_LIMIT, SONG_DOWNLOAD_RATE_LIMIT } from '../lib/rate-limits.js'
@@ -33,15 +34,15 @@ export const adminDownloadRoutes: FastifyPluginAsync = async (app) => {
       if (!DATE.test(date)) throw badRequest('BAD_DATE', '日期格式不对')
 
       const slotId = request.query.slotId?.trim() || undefined
-      let slotName: string | undefined
-      if (slotId) {
-        const slot = await prisma.broadcastSlot.findUnique({
-          where: { id: slotId },
-          select: { name: true },
-        })
-        if (!slot) throw badRequest('BAD_SLOT', '时段不对')
-        slotName = slot.name
-      }
+       let slotName: string | undefined
+       if (slotId) {
+         const slots = await db.select({ name: schema.broadcastSlot.name })
+           .from(schema.broadcastSlot)
+           .where(eq(schema.broadcastSlot.id, slotId))
+         const slot = slots[0]
+         if (!slot) throw badRequest('BAD_SLOT', '时段不对')
+         slotName = slot.name
+       }
 
       reply.header('content-type', 'application/zip')
       reply.header('content-disposition', contentDisposition(dayZipName(date, slotName)))

@@ -5,8 +5,9 @@
 import { ZipArchive } from 'archiver'
 import type { Archiver } from 'archiver'
 import NodeID3 from 'node-id3'
-import { prisma } from '../lib/db.js'
+import { db, schema } from '../lib/db.js'
 import { notFound } from '../lib/errors.js'
+import { eq, asc } from 'drizzle-orm'
 import { UA_DESKTOP } from '../sources/http.js'
 import { getSource } from '../sources/index.js'
 import type { AudioTarget } from '../sources/types.js'
@@ -75,7 +76,8 @@ function writeTags(
 
 /** 取一首歌的完整文件。orderNo 给了就作为文件名前缀（播出顺序） */
 export async function buildTrack(requestId: string, orderNo?: number): Promise<TrackFile> {
-  const request = await prisma.songRequest.findUnique({ where: { id: requestId } })
+  const requests = await db.select().from(schema.songRequest).where(eq(schema.songRequest.id, requestId))
+  const request = requests[0]
   if (!request) throw notFound('REQUEST_NOT_FOUND', '这条点歌不存在')
 
   const source = getSource(request.source)
@@ -122,28 +124,34 @@ interface DayRow {
 }
 
 async function readDayRows(date: string, slotId?: string): Promise<DayRow[]> {
-  const rows = await prisma.schedule.findMany({
-    where: { playDate: date, ...(slotId ? { slotId } : {}) },
-    include: {
-      slot: { select: { name: true, sortOrder: true } },
-      request: {
-        select: {
-          id: true,
-          title: true,
-          artist: true,
-          durationMs: true,
-          grade: true,
-          classNo: true,
-          requesterName: true,
-          isManual: true,
-        },
-      },
-    },
-    orderBy: [{ slot: { sortOrder: 'asc' } }, { orderNo: 'asc' }],
-  })
+  let whereCondition = eq(schema.schedule.playDate, date)
+  if (slotId) {
+    const { and } = await import('drizzle-orm')
+    whereCondition = and(whereCondition, eq(schema.schedule.slotId, slotId))!
+  }
+  
+  const rows = await db
+    .select({
+      orderNo: schema.schedule.orderNo,
+      slotName: schema.broadcastSlot.name,
+      slotSortOrder: schema.broadcastSlot.sortOrder,
+      requestId: schema.songRequest.id,
+      title: schema.songRequest.title,
+      artist: schema.songRequest.artist,
+      durationMs: schema.songRequest.durationMs,
+      grade: schema.songRequest.grade,
+      classNo: schema.songRequest.classNo,
+      requesterName: schema.songRequest.requesterName,
+      isManual: schema.songRequest.isManual,
+    })
+    .from(schema.schedule)
+    .innerJoin(schema.broadcastSlot, eq(schema.schedule.slotId, schema.broadcastSlot.id))
+    .innerJoin(schema.songRequest, eq(schema.schedule.requestId, schema.songRequest.id))
+    .where(whereCondition)
+    .orderBy(asc(schema.broadcastSlot.sortOrder), asc(schema.schedule.orderNo))
 
   const gradeText: Record<string, string> = { G1: '高一', G2: '高二', G3: '高三' }
-  return rows.map((row) => ({
+  return (rows as any[]).map((row: any) => ({
     requestId: row.request.id,
     orderNo: row.orderNo,
     slotName: row.slot.name,

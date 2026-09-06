@@ -2,8 +2,9 @@
 // 整个插件挂一个 requireSuper 钩子，审核员访问一律 403（REQUIREMENTS.md 第 7 节）。
 import { hash } from '@node-rs/argon2'
 import type { FastifyPluginAsync } from 'fastify'
+import { eq, asc } from 'drizzle-orm'
 import { requireSuper } from '../lib/auth.js'
-import { prisma } from '../lib/db.js'
+import { db } from '../lib/db.js'
 import { isAdminRole, isSource } from '../lib/domain.js'
 import type { SourceId } from '../lib/domain.js'
 import { badRequest, notFound } from '../lib/errors.js'
@@ -22,6 +23,10 @@ import { clearCookie, listCredentials, recordCheck, saveCookie } from '../servic
 import { readSite } from '../services/site.js'
 import { neteaseQrCheck, neteaseQrStart } from '../services/source-accounts.js'
 import { checkAll } from '../sources/index.js'
+import { broadcastSlot, gradeConfig, adminUser } from '../drizzle/schema-sqlite.js'
+
+// 类型转换辅助函数，用于处理跨数据库的类型兼容性
+const withDb = (db: any) => db
 
 function requireSourceId(value: string): SourceId {
   if (!isSource(value)) throw badRequest('BAD_SOURCE', '音源不对')
@@ -40,7 +45,10 @@ export const adminConfigRoutes: FastifyPluginAsync = async (app) => {
   })
 
   app.get('/api/admin/config/slots', async () =>
-    prisma.broadcastSlot.findMany({ orderBy: [{ sortOrder: 'asc' }, { startTime: 'asc' }] }),
+    withDb(db)
+      .select()
+      .from(broadcastSlot)
+      .orderBy(asc(broadcastSlot.sortOrder), asc(broadcastSlot.startTime)),
   )
 
   app.put<{ Body: { slots?: SlotInput[] } }>('/api/admin/config/slots', async (request) => {
@@ -48,7 +56,10 @@ export const adminConfigRoutes: FastifyPluginAsync = async (app) => {
     if (!Array.isArray(slots)) throw badRequest('MISSING_FIELDS', '没收到时段列表')
     await saveSlots(slots)
     await writeAudit(request.admin!.id, 'config.slots', null, { count: slots.length })
-    return prisma.broadcastSlot.findMany({ orderBy: [{ sortOrder: 'asc' }, { startTime: 'asc' }] })
+    return withDb(db)
+      .select()
+      .from(broadcastSlot)
+      .orderBy(asc(broadcastSlot.sortOrder), asc(broadcastSlot.startTime))
   })
 
   app.get<{ Querystring: { month?: string } }>('/api/admin/config/calendar', async (request) =>
@@ -64,7 +75,10 @@ export const adminConfigRoutes: FastifyPluginAsync = async (app) => {
   })
 
   app.get('/api/admin/config/grades', async () =>
-    prisma.gradeConfig.findMany({ orderBy: { grade: 'asc' } }),
+    withDb(db)
+      .select()
+      .from(gradeConfig)
+      .orderBy(asc(gradeConfig.grade)),
   )
 
   app.put<{ Body: { counts?: Record<string, number> } }>(
@@ -74,7 +88,10 @@ export const adminConfigRoutes: FastifyPluginAsync = async (app) => {
       if (!counts) throw badRequest('MISSING_FIELDS', '没收到班数')
       await saveGradeCounts(counts)
       await writeAudit(request.admin!.id, 'config.grades', null, counts)
-      return prisma.gradeConfig.findMany({ orderBy: { grade: 'asc' } })
+      return withDb(db)
+        .select()
+        .from(gradeConfig)
+        .orderBy(asc(gradeConfig.grade))
     },
   )
 
@@ -143,18 +160,18 @@ export const adminConfigRoutes: FastifyPluginAsync = async (app) => {
   )
 
   app.get('/api/admin/users', async () =>
-    prisma.adminUser.findMany({
-      select: {
-        id: true,
-        username: true,
-        role: true,
-        disabled: true,
-        mustChangePassword: true,
-        lastLoginAt: true,
-        createdAt: true,
-      },
-      orderBy: { createdAt: 'asc' },
-    }),
+    withDb(db)
+      .select({
+        id: adminUser.id,
+        username: adminUser.username,
+        role: adminUser.role,
+        disabled: adminUser.disabled,
+        mustChangePassword: adminUser.mustChangePassword,
+        lastLoginAt: adminUser.lastLoginAt,
+        createdAt: adminUser.createdAt,
+      })
+      .from(adminUser)
+      .orderBy(asc(adminUser.createdAt)),
   )
 
   app.post<{ Body: { username?: string; password?: string; role?: string } }>(
@@ -168,16 +185,32 @@ export const adminConfigRoutes: FastifyPluginAsync = async (app) => {
       }
       if (password.length < 8) throw badRequest('WEAK_PASSWORD', '密码至少 8 位')
       if (!isAdminRole(role)) throw badRequest('BAD_ROLE', '角色不对')
-      if (await prisma.adminUser.findUnique({ where: { username } })) {
+      
+      const existing = await withDb(db)
+        .select({ id: adminUser.id })
+        .from(adminUser)
+        .where(eq(adminUser.username, username))
+      if (existing.length > 0) {
         throw badRequest('DUP_USERNAME', '这个账号名已经有了')
       }
 
-      const created = await prisma.adminUser.create({
-        data: { username, passwordHash: await hash(password), role, mustChangePassword: true },
-        select: { id: true, username: true, role: true },
-      })
-      await writeAudit(request.admin!.id, 'user.create', created.id, { username, role })
-      return created
+      const created = await withDb(db)
+        .insert(adminUser)
+        .values({
+          id: crypto.randomUUID(),
+          username,
+          passwordHash: await hash(password),
+          role,
+          mustChangePassword: true,
+        })
+        .returning({
+          id: adminUser.id,
+          username: adminUser.username,
+          role: adminUser.role,
+        })
+      
+      await writeAudit(request.admin!.id, 'user.create', created[0].id, { username, role })
+      return created[0]
     },
   )
 
@@ -185,12 +218,16 @@ export const adminConfigRoutes: FastifyPluginAsync = async (app) => {
     Params: { id: string }
     Body: { disabled?: boolean; role?: string; password?: string }
   }>('/api/admin/users/:id', async (request) => {
-    const target = await prisma.adminUser.findUnique({ where: { id: request.params.id } })
-    if (!target) throw notFound('USER_NOT_FOUND', '账号不存在')
+    const target = await withDb(db)
+      .select()
+      .from(adminUser)
+      .where(eq(adminUser.id, request.params.id))
+    if (target.length === 0) throw notFound('USER_NOT_FOUND', '账号不存在')
 
+    const user = target[0]
     const { disabled, role, password } = request.body ?? {}
     // 别把自己锁在门外：不能停用自己，也不能把自己降成审核员
-    if (target.id === request.admin!.id && (disabled === true || (role && role !== 'SUPER'))) {
+    if (user.id === request.admin!.id && (disabled === true || (role && role !== 'SUPER'))) {
       throw badRequest('SELF_LOCKOUT', '不能停用或降级自己的账号')
     }
     if (role !== undefined && !isAdminRole(role)) throw badRequest('BAD_ROLE', '角色不对')
@@ -198,17 +235,20 @@ export const adminConfigRoutes: FastifyPluginAsync = async (app) => {
       throw badRequest('WEAK_PASSWORD', '密码至少 8 位')
     }
 
-    await prisma.adminUser.update({
-      where: { id: target.id },
-      data: {
-        ...(disabled === undefined ? {} : { disabled }),
-        ...(role === undefined ? {} : { role }),
-        ...(password === undefined
-          ? {}
-          : { passwordHash: await hash(password), mustChangePassword: true }),
-      },
-    })
-    await writeAudit(request.admin!.id, 'user.update', target.id, {
+    const updateData: Record<string, any> = {}
+    if (disabled !== undefined) updateData.disabled = disabled
+    if (role !== undefined) updateData.role = role
+    if (password !== undefined) {
+      updateData.passwordHash = await hash(password)
+      updateData.mustChangePassword = true
+    }
+
+    await withDb(db)
+      .update(adminUser)
+      .set(updateData)
+      .where(eq(adminUser.id, user.id))
+    
+    await writeAudit(request.admin!.id, 'user.update', user.id, {
       disabled,
       role,
       passwordReset: password !== undefined,

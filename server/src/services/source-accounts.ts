@@ -1,5 +1,6 @@
 // 音源账号：网易云走官方扫码登录拿 Cookie（对方站点有 X-Frame-Options，内嵌登录页行不通）。
 // QQ 与酷狗台里没有会员，先留手工粘贴 Cookie 的口子；酷狗将来可以走 sidecar 的 /login/qr/*。
+// Drizzle ORM 迁移：此文件的 saveCookie 依赖 credentials.ts（已迁移），无需本文件调整。
 import { neteaseApi } from '../sources/netease.js'
 import { AppError } from '../lib/errors.js'
 import { saveCookie } from './credentials.js'

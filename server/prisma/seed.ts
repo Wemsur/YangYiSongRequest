@@ -3,11 +3,15 @@
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import 'dotenv/config';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { hash } from '@node-rs/argon2';
-import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
-import { PrismaPg } from '@prisma/adapter-pg';
-import { PrismaClient } from '../src/generated/prisma/client.js';
+import { drizzle as drizzleSqlite } from 'drizzle-orm/better-sqlite3';
+import { drizzle as drizzlePg } from 'drizzle-orm/node-postgres';
+import Database from 'better-sqlite3';
+import { Pool } from 'pg';
+import * as schemaSqlite from '../src/drizzle/schema-sqlite.js';
+import * as schemaPg from '../src/drizzle/schema-pg.js';
+import { eq } from 'drizzle-orm';
 
 const provider = process.env.DATABASE_PROVIDER ?? 'sqlite';
 if (provider !== 'sqlite' && provider !== 'postgresql') {
@@ -21,11 +25,13 @@ const sqliteFile =
     : null;
 if (sqliteFile) mkdirSync(path.dirname(sqliteFile), { recursive: true });
 
-const prisma = new PrismaClient({
-  adapter: sqliteFile
-    ? new PrismaBetterSqlite3({ url: `file:${sqliteFile}` })
-    : new PrismaPg({ connectionString: rawUrl }),
-});
+const schema = provider === 'sqlite' ? schemaSqlite : schemaPg;
+const db = provider === 'sqlite'
+  ? drizzleSqlite(new Database(sqliteFile!), { schema })
+  : drizzlePg(new Pool({ connectionString: rawUrl }), { schema });
+
+// 导入所需的表定义
+const { adminUser, broadcastSlot, gradeConfig, siteSetting } = schema as any;
 
 /** 台里现行时段；上限按每首约 4 分钟估，管理员可在后台调整 */
 const SLOTS = [
@@ -42,19 +48,24 @@ const SITE_DEFAULTS: Record<string, string> = {
 
 async function seedAdmin() {
   const username = process.env.SEED_ADMIN_USER?.trim() || 'yadmin';
-  if (await prisma.adminUser.findUnique({ where: { username } })) {
+  const existing = await (db as any)
+    .select()
+    .from(adminUser)
+    .where(eq(adminUser.username, username))
+    .limit(1);
+  
+  if (existing.length > 0) {
     console.log(`超管 ${username} 已存在，跳过`);
     return;
   }
   const provided = process.env.SEED_ADMIN_PASSWORD?.trim();
   const password = provided || randomBytes(9).toString('base64url');
-  await prisma.adminUser.create({
-    data: {
-      username,
-      passwordHash: await hash(password),
-      role: 'SUPER',
-      mustChangePassword: true,
-    },
+  await (db as any).insert(adminUser).values({
+    id: randomUUID(),
+    username,
+    passwordHash: await hash(password),
+    role: 'SUPER',
+    mustChangePassword: true,
   });
   console.log(
     provided
@@ -65,29 +76,51 @@ async function seedAdmin() {
 
 async function seedSlots() {
   for (const slot of SLOTS) {
-    await prisma.broadcastSlot.upsert({
-      where: { name: slot.name },
-      update: {},
-      create: slot,
-    });
+    const existing = await (db as any)
+      .select()
+      .from(broadcastSlot)
+      .where(eq(broadcastSlot.name, slot.name))
+      .limit(1);
+    
+    if (existing.length === 0) {
+      await (db as any).insert(broadcastSlot).values({
+        id: randomUUID(),
+        ...slot,
+      });
+    }
   }
   console.log(`播出时段：${SLOTS.map((s) => `${s.name} ${s.startTime}-${s.endTime}`).join('，')}`);
 }
 
 async function seedGrades() {
   for (const grade of ['G1', 'G2', 'G3'] as const) {
-    await prisma.gradeConfig.upsert({
-      where: { grade },
-      update: {},
-      create: { grade, classCount: 23 },
-    });
+    const existing = await (db as any)
+      .select()
+      .from(gradeConfig)
+      .where(eq(gradeConfig.grade, grade))
+      .limit(1);
+    
+    if (existing.length === 0) {
+      await (db as any).insert(gradeConfig).values({
+        grade,
+        classCount: 23,
+      });
+    }
   }
   console.log('年级班数：高一 / 高二 / 高三 各 23 个班');
 }
 
 async function seedSiteSettings() {
   for (const [key, value] of Object.entries(SITE_DEFAULTS)) {
-    await prisma.siteSetting.upsert({ where: { key }, update: {}, create: { key, value } });
+    const existing = await (db as any)
+      .select()
+      .from(siteSetting)
+      .where(eq(siteSetting.key, key))
+      .limit(1);
+    
+    if (existing.length === 0) {
+      await (db as any).insert(siteSetting).values({ key, value });
+    }
   }
   console.log(`站点开关：${Object.keys(SITE_DEFAULTS).join('、')}`);
 }
@@ -99,5 +132,5 @@ try {
   await seedSiteSettings();
   console.log('种子数据写入完成');
 } finally {
-  await prisma.$disconnect();
+  // Drizzle ORM 不需要显式断开连接（better-sqlite3 / postgres-js 自动管理）
 }

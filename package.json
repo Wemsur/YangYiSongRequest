@@ -27,6 +27,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "concurrently": "10.0.5",
+    "drizzle-kit": "^0.31.10",
     "eslint": "^10.10.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-vue": "^10.10.0",
@@ -42,5 +43,8 @@
   "comment:overrides": "vue-tsc 3.x 仍然 require typescript/lib/tsc，而 TypeScript 7 的原生版本不再导出这个入口，所以整仓统一压在 6.0.3",
   "overrides": {
     "typescript": "6.0.3"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.45.2"
   }
 }
